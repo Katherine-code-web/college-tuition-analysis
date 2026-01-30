@@ -250,8 +250,8 @@ GitHub Repository: https://github.com/[your-username]/college-tuition-analysis
 ## 📧 Contact
 
 **Author**: Yun-Ting Su  
-**LinkedIn**: [Your Profile URL]  
-**Email**: [Your Email]  
+**LinkedIn**: [www.linkedin.com/in/katherine-sue-867b70364]  
+**Email**: [kt0704@bu.edu]  
 
 Questions? Suggestions? Open an issue or reach out!
 
