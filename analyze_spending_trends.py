@@ -2,19 +2,21 @@
 U.S. Higher Education Spending Trends Analysis (2018-2023)
 ===========================================================
 
-This script performs comprehensive time-series analysis of higher education spending，包括：
-1. FTE Data Correction（2020-2023年異常值處理）
-2. Inflation Adjustment（CPI deflator）
-3. 支出佔比Trend Analysis
-4. 名目vs實質支出對比
-5. Public vs Private比較分析
-6. 統計顯著性檢驗
+This script performs comprehensive time-series analysis of higher education spending,
+including:
+1. FTE Data Correction (handling 2020-2023 anomalies)
+2. Inflation Adjustment (CPI deflator)
+3. Spending Share Trend Analysis
+4. Nominal vs. Real Spending Comparison
+5. Public vs. Private Institution Comparison
+6. Statistical Significance Testing
 
-Author: Bo-Ru
+Author: Yun-Ting Su
 Date: 2026-02-04
 Data Source: IPEDS (Integrated Postsecondary Education Data System)
 """
 
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -24,18 +26,22 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================================
-# 配置參數
+# Configuration
 # ============================================================================
 
 # Input file path
-INPUT_FILE = 'panel_2018_2023.csv'
+INPUT_FILE = 'data/panel_2018_2023.csv'
+
+# Output directory
+OUTPUT_DIR = 'outputs'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Output file paths
-OUTPUT_CORRECTED_DATA = 'panel_2018_2023_corrected.csv'
-OUTPUT_SUMMARY_STATS = 'trend_analysis_summary.csv'
-OUTPUT_VISUALIZATION = 'trend_analysis_comprehensive.png'
+OUTPUT_CORRECTED_DATA = os.path.join(OUTPUT_DIR, 'panel_2018_2023_corrected.csv')
+OUTPUT_SUMMARY_STATS = os.path.join(OUTPUT_DIR, 'trend_analysis_summary.csv')
+OUTPUT_VISUALIZATION = os.path.join(OUTPUT_DIR, 'trend_analysis_comprehensive.png')
 
-# CPI調整因子（2018年為基準=1.00）
+# CPI deflator (base year 2018 = 1.00)
 # Data source: U.S. Bureau of Labor Statistics
 CPI_DEFLATOR = {
     2018: 1.00,  # Base year
@@ -46,96 +52,98 @@ CPI_DEFLATOR = {
     2023: 1.20   # +4%
 }
 
-# FTE異常閾值（2020/2019比值超過此值視為異常）
+# FTE anomaly threshold (2020/2019 ratio above this value is flagged as anomalous)
 FTE_ANOMALY_THRESHOLD = 2.0
 
-# 統計顯著性水平
+# Statistical significance level
 ALPHA_LEVEL = 0.05
 
 # ============================================================================
-# 第一部分：數據載入與初步檢查
+# Part 1: Data Loading and Initial Inspection
 # ============================================================================
 
 def load_and_inspect_data(filepath):
     """
-    載入原始數據並進rows初步檢查
-    
-    Parameters:
-    -----------
+    Load raw data and perform initial quality checks.
+
+    Parameters
+    ----------
     filepath : str
-        數據文件路徑
-        
-    Returns:
-    --------
+        Path to the data file.
+
+    Returns
+    -------
     df : pandas.DataFrame
-        載入的數據框
+        Loaded dataframe.
     """
     print("=" * 80)
     print("STEP 1: Loading Data")
     print("=" * 80)
-    
-    # 讀取CSV
+
+    # Read CSV
     df = pd.read_csv(filepath)
-    
-    # 基本資訊
-    print(f"\nData dimensions: {df.shape[0]} rows × {df.shape[1]} columns")
+
+    # Basic info
+    print(f"\nData dimensions: {df.shape[0]} rows x {df.shape[1]} columns")
     print(f"Time range: {df['year'].min()} - {df['year'].max()}")
-    print(f"Number of schools: {df['UNITID'].nunique()}")
-    
-    # 年度分布
+    print(f"Number of institutions: {df['UNITID'].nunique()}")
+
+    # Annual distribution
     print("\nObservations by year:")
     print(df['year'].value_counts().sort_index())
-    
+
     # Distribution by institution type
     print("\nDistribution by institution type:")
     print(df['type'].value_counts())
-    
-    # 缺失值檢查
+
+    # Missing value check
     missing = df.isnull().sum()
     if missing.sum() > 0:
-        print("\nMissing values statistics (showing only columns with missing values):")
+        print("\nMissing value statistics (columns with missing values only):")
         print(missing[missing > 0])
-    
+
     return df
 
+
 # ============================================================================
-# 第二部分：FTE Data Correction
+# Part 2: FTE Data Correction
 # ============================================================================
 
 def diagnose_fte_anomaly(df):
     """
-    診斷FTE數據異常問題
-    
-    背景: 2020年FTE數據出現系統性飆升（+258%），可能因COVID-19
-    期間統計方法變更或遠程學習學生計算方式改變。
-    
-    Parameters:
-    -----------
+    Diagnose the FTE data anomaly.
+
+    Background: 2020 FTE data shows a systematic spike (+258%), likely caused by
+    changes in statistical methodology or remote-learning student counting during
+    COVID-19.
+
+    Parameters
+    ----------
     df : pandas.DataFrame
-        原始數據
-        
-    Returns:
-    --------
+        Raw data.
+
+    Returns
+    -------
     diagnosis : dict
-        診斷結果統計
+        Diagnostic statistics by year.
     """
     print("\n" + "=" * 80)
     print("STEP 2: FTE Data Anomaly Diagnosis")
     print("=" * 80)
-    
-    # 計算年度Change率
+
+    # Compute year-over-year change rates
     df_sorted = df.sort_values(['UNITID', 'year']).copy()
     df_sorted['fte_change'] = df_sorted.groupby('UNITID')['fte'].pct_change(fill_method=None)
-    
+
     diagnosis = {}
-    
-    # 檢查各年度異常比例
+
+    # Check anomaly rates by year
     for year in range(2019, 2024):
         if year in df['year'].values:
             changes = df_sorted[df_sorted['year'] == year]['fte_change']
-            n_anomaly = (changes.abs() > 1.0).sum()  # >100%Change視為異常
+            n_anomaly = (changes.abs() > 1.0).sum()  # >100% change flagged as anomalous
             n_total = changes.notna().sum()
-            
+
             diagnosis[year] = {
                 'anomaly_count': n_anomaly,
                 'total_count': n_total,
@@ -143,276 +151,266 @@ def diagnose_fte_anomaly(df):
                 'mean_change': changes.mean() * 100,
                 'median_change': changes.median() * 100
             }
-            
-            print(f"\n{year-1}→{year}:")
-            print(f"  異常Number of schools: {n_anomaly} / {n_total} ({diagnosis[year]['anomaly_pct']:.1f}%)")
+
+            print(f"\n{year-1} -> {year}:")
+            print(f"  Anomalous institutions: {n_anomaly} / {n_total} ({diagnosis[year]['anomaly_pct']:.1f}%)")
             print(f"  Mean change rate: {diagnosis[year]['mean_change']:.1f}%")
             print(f"  Median change rate: {diagnosis[year]['median_change']:.1f}%")
-    
-    # 重點標記2020年問題
+
+    # Highlight the 2020 anomaly
     if 2020 in diagnosis:
         print("\n" + "!" * 80)
-        print(f"⚠️  Severe anomaly detected in 2020：{diagnosis[2020]['anomaly_pct']:.1f}%schoolsFTE異常增長")
+        print(f"WARNING: Severe anomaly detected in 2020 — "
+              f"{diagnosis[2020]['anomaly_pct']:.1f}% of institutions show abnormal FTE growth")
         print(f"   Mean growth rate: {diagnosis[2020]['mean_change']:.1f}%")
         print("!" * 80)
-    
+
     return diagnosis
+
 
 def correct_fte_data(df, threshold=FTE_ANOMALY_THRESHOLD):
     """
-    修正FTE數據異常
-    
-    策略: 對於2020年FTE異常飆升schools（2020/2019 > threshold），
-    使用2018-2019的正常增長率外推2020-2023年的FTE值。
-    
-    Parameters:
-    -----------
+    Correct anomalous FTE data.
+
+    Strategy: For institutions where 2020 FTE spiked above the threshold
+    (2020/2019 > threshold), extrapolate 2020-2023 FTE values using the
+    normal 2018-2019 growth rate.
+
+    Parameters
+    ----------
     df : pandas.DataFrame
-        原始數據
+        Raw data.
     threshold : float
-        異常判定閾值（默認2.0，即增長>100%）
-        
-    Returns:
-    --------
+        Anomaly threshold (default 2.0, meaning >100% growth is anomalous).
+
+    Returns
+    -------
     df_corrected : pandas.DataFrame
-        修正後的數據
+        Data with corrected FTE values.
     """
     print("\n" + "=" * 80)
     print("STEP 3: FTE Data Correction")
     print("=" * 80)
-    
+
     df_corrected = df.copy()
-    
-    # 創建透視表以便操作
+
+    # Create pivot table for easier manipulation
     fte_pivot = df.pivot(index='UNITID', columns='year', values='fte')
-    
-    # 識別需要修正schools
+
+    # Identify institutions needing correction
     if 2019 in fte_pivot.columns and 2020 in fte_pivot.columns:
         needs_correction = (
-            (fte_pivot[2020] / fte_pivot[2019] > threshold) & 
-            fte_pivot[2020].notna() & 
+            (fte_pivot[2020] / fte_pivot[2019] > threshold) &
+            fte_pivot[2020].notna() &
             fte_pivot[2019].notna()
         )
         n_corrected = needs_correction.sum()
-        print(f"\n需要修正的Number of schools: {n_corrected}")
-        
-        # 對每所需要修正schools
+        print(f"\nInstitutions requiring correction: {n_corrected}")
+
+        # Apply correction for each flagged institution
         for unitid in fte_pivot[needs_correction].index:
-            # 計算2018-2019的正常增長率
+            # Compute 2018-2019 baseline growth rate
             fte_2018 = fte_pivot.loc[unitid, 2018] if 2018 in fte_pivot.columns else np.nan
             fte_2019 = fte_pivot.loc[unitid, 2019]
-            
+
             if pd.notna(fte_2018) and pd.notna(fte_2019):
-                # 計算增長率
                 growth_rate = (fte_2019 - fte_2018) / fte_2018
             else:
-                # 如果沒有2018數據，假設零增長
+                # If no 2018 data, assume zero growth
                 growth_rate = 0.0
-            
-            # 外推2020-2023
+
+            # Extrapolate 2020-2023
             fte_2019_value = fte_2019
             for year in [2020, 2021, 2022, 2023]:
                 if year in df['year'].values:
                     fte_corrected = fte_2019_value * ((1 + growth_rate) ** (year - 2019))
                     df_corrected.loc[
-                        (df_corrected['UNITID'] == unitid) & 
-                        (df_corrected['year'] == year), 
+                        (df_corrected['UNITID'] == unitid) &
+                        (df_corrected['year'] == year),
                         'fte'
                     ] = fte_corrected
-        
-        print(f"Correction complete! Processed {n_corrected} schools for 2020-2023 FTE data")
-    
+
+        print(f"Correction complete — {n_corrected} institutions corrected for 2020-2023")
+
     return df_corrected
+
 
 def recalculate_per_fte_metrics(df):
     """
-    Recalculating per_fte metrics
-    
-    在FTE修正後，需要重新計算所有Per-FTE spending指標。
-    
-    Parameters:
-    -----------
+    Recalculate per-FTE spending metrics after FTE correction.
+
+    Parameters
+    ----------
     df : pandas.DataFrame
-        修正FTE後的數據
-        
-    Returns:
-    --------
+        Data with corrected FTE values.
+
+    Returns
+    -------
     df : pandas.DataFrame
-        更新per_fte指標後的數據
+        Data with updated per-FTE metrics.
     """
-    print("\nRecalculating per_fte metrics...")
-    
-    # 重新計算
+    print("\nRecalculating per-FTE metrics...")
+
     df['admin_per_fte'] = df['admin'] / df['fte']
     df['instruction_per_fte'] = df['instruction'] / df['fte']
     df['state_per_fte'] = df['state'] / df['fte']
     df['total_per_fte'] = df['total'] / df['fte']
-    
-    # 處理無限值和NaN
+
+    # Handle infinite values and NaN
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    
-    print("✓ per_fte metrics updated")
-    
+
+    print("Per-FTE metrics updated.")
+
     return df
 
+
 # ============================================================================
-# 第三部分：Inflation Adjustment
+# Part 3: Inflation Adjustment
 # ============================================================================
 
 def add_inflation_adjusted_metrics(df, cpi_deflator=CPI_DEFLATOR):
     """
-    添加Inflation Adjustment後的實質指標
-    
-    將所有名目金額調整至2018年美元（constant dollars）。
-    這讓我們能看到"實際購買力"的Change。
-    
-    Parameters:
-    -----------
+    Add inflation-adjusted (real) spending metrics.
+
+    Converts all nominal dollar amounts to constant 2018 dollars, enabling
+    meaningful comparison of real purchasing power across years.
+
+    Parameters
+    ----------
     df : pandas.DataFrame
-        數據
+        Data with nominal spending values.
     cpi_deflator : dict
-        各年度CPI調整因子
-        
-    Returns:
-    --------
+        CPI deflator by year (base year 2018 = 1.00).
+
+    Returns
+    -------
     df : pandas.DataFrame
-        添加實質指標後的數據
+        Data with real spending metrics appended.
     """
     print("\n" + "=" * 80)
     print("STEP 4: Inflation Adjustment")
     print("=" * 80)
-    
-    print("\nCPI Deflator (2018=1.00):")
+
+    print("\nCPI Deflator (2018 = 1.00):")
     for year, deflator in sorted(cpi_deflator.items()):
         cumulative_inflation = (deflator - 1.0) * 100
         print(f"  {year}: {deflator:.2f} (Cumulative inflation: {cumulative_inflation:+.1f}%)")
-    
-    # 計算實質值（絕對金額）
-    df['admin_real'] = df.apply(
-        lambda x: x['admin'] / cpi_deflator[x['year']], axis=1
-    )
-    df['instruction_real'] = df.apply(
-        lambda x: x['instruction'] / cpi_deflator[x['year']], axis=1
-    )
-    df['total_real'] = df.apply(
-        lambda x: x['total'] / cpi_deflator[x['year']], axis=1
-    )
-    
-    # 計算實質值（人均）
-    df['admin_per_fte_real'] = df.apply(
-        lambda x: x['admin_per_fte'] / cpi_deflator[x['year']], axis=1
-    )
-    df['instruction_per_fte_real'] = df.apply(
-        lambda x: x['instruction_per_fte'] / cpi_deflator[x['year']], axis=1
-    )
-    df['total_per_fte_real'] = df.apply(
-        lambda x: x['total_per_fte'] / cpi_deflator[x['year']], axis=1
-    )
-    
-    print("\n✓ Real metrics added")
-    print("  - *_real: Institutional-level real spending（2018年美元）")
-    print("  - *_per_fte_real: Per-FTE real spending（2018年美元）")
-    
+
+    # Real institutional-level spending
+    df['admin_real'] = df.apply(lambda x: x['admin'] / cpi_deflator[x['year']], axis=1)
+    df['instruction_real'] = df.apply(lambda x: x['instruction'] / cpi_deflator[x['year']], axis=1)
+    df['total_real'] = df.apply(lambda x: x['total'] / cpi_deflator[x['year']], axis=1)
+
+    # Real per-FTE spending
+    df['admin_per_fte_real'] = df.apply(lambda x: x['admin_per_fte'] / cpi_deflator[x['year']], axis=1)
+    df['instruction_per_fte_real'] = df.apply(lambda x: x['instruction_per_fte'] / cpi_deflator[x['year']], axis=1)
+    df['total_per_fte_real'] = df.apply(lambda x: x['total_per_fte'] / cpi_deflator[x['year']], axis=1)
+
+    print("\nReal metrics added:")
+    print("  - *_real: Institution-level real spending (2018 dollars)")
+    print("  - *_per_fte_real: Per-FTE real spending (2018 dollars)")
+
     return df
 
+
 # ============================================================================
-# 第四部分：Trend Analysis
+# Part 4: Trend Analysis
 # ============================================================================
 
 def calculate_trends(df):
     """
-    計算完整的趨勢統計
-    
-    包括：
+    Compute comprehensive trend statistics.
+
+    Includes:
     1. Spending Share Trends
     2. Nominal Per-FTE Spending Trends
-    3. 實質Per-FTE spending趨勢
-    4. Public vs Private分組趨勢
-    
-    Parameters:
-    -----------
+    3. Real Per-FTE Spending Trends
+    4. Public vs. Private Grouped Trends
+
+    Parameters
+    ----------
     df : pandas.DataFrame
-        完整處理後的數據
-        
-    Returns:
-    --------
+        Fully processed data.
+
+    Returns
+    -------
     results : dict
-        Contains所有Trend Analysis結果的字典
+        Dictionary containing all trend analysis results.
     """
     print("\n" + "=" * 80)
     print("STEP 5: Trend Analysis")
     print("=" * 80)
-    
+
     results = {}
-    
+
     # ========================================================================
-    # 5.1 整體Spending Share Trends
+    # 5.1 Spending Share Trends
     # ========================================================================
-    print("\n【A. Spending Share Trends】")
-    
+    print("\n[A. Spending Share Trends]")
+
     pct_trends = df.groupby('year').agg({
         'admin_pct': 'mean',
         'instruction_pct': 'mean',
         'research_pct': 'mean'
     }).round(4)
-    
+
     print("\nAnnual average shares:")
     print(pct_trends)
-    
-    # 計算2018→2023Change
+
+    # 2018 -> 2023 change
     if 2018 in pct_trends.index and 2023 in pct_trends.index:
         pct_change = (
-            (pct_trends.loc[2023] - pct_trends.loc[2018]) / 
+            (pct_trends.loc[2023] - pct_trends.loc[2018]) /
             pct_trends.loc[2018] * 100
         ).round(1)
-        print("\n2018→2023Change:")
+        print("\n2018 -> 2023 change (%):")
         print(pct_change)
-    
-    # Trend Significance Tests
+
+    # Trend significance tests
     print("\nTrend Significance Tests (Linear Regression):")
     pct_significance = {}
     for var in ['admin_pct', 'instruction_pct', 'research_pct']:
         years = pct_trends.index.values
         values = pct_trends[var].values
         slope, intercept, r_value, p_value, std_err = stats.linregress(years, values)
-        
+
         sig_level = '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'NS'
-        
+
         pct_significance[var] = {
             'slope': slope,
             'r_squared': r_value**2,
             'p_value': p_value,
             'significance': sig_level
         }
-        
-        print(f"  {var:20s}: slope={slope:8.6f}, R²={r_value**2:.3f}, p={p_value:.4f} {sig_level}")
-    
+
+        print(f"  {var:20s}: slope={slope:8.6f}, R2={r_value**2:.3f}, p={p_value:.4f} {sig_level}")
+
     results['pct_trends'] = pct_trends
     results['pct_significance'] = pct_significance
-    
+
     # ========================================================================
-    # 5.2 實質Per-FTE spending趨勢
+    # 5.2 Real Per-FTE Spending Trends
     # ========================================================================
-    print("\n【B. 實質Per-FTE spending趨勢】(2018年美元)")
-    
+    print("\n[B. Real Per-FTE Spending Trends (2018 dollars)]")
+
     real_per_fte_trends = df.groupby('year').agg({
         'admin_per_fte_real': 'median',
         'instruction_per_fte_real': 'median',
         'total_per_fte_real': 'median'
     }).round(2)
-    
-    print("\n年度median:")
+
+    print("\nAnnual medians:")
     print(real_per_fte_trends)
-    
-    # 計算Change
+
+    # 2018 -> 2023 real change
     if 2018 in real_per_fte_trends.index and 2023 in real_per_fte_trends.index:
         real_change = (
-            (real_per_fte_trends.loc[2023] - real_per_fte_trends.loc[2018]) / 
+            (real_per_fte_trends.loc[2023] - real_per_fte_trends.loc[2018]) /
             real_per_fte_trends.loc[2018] * 100
         ).round(1)
-        print("\n2018→2023實質Change:")
+        print("\n2018 -> 2023 real change (%):")
         print(real_change)
-    
+
     # Trend significance
     print("\nTrend Significance Tests:")
     real_significance = {}
@@ -420,100 +418,100 @@ def calculate_trends(df):
         years = real_per_fte_trends.index.values
         values = real_per_fte_trends[var].values
         slope, intercept, r_value, p_value, std_err = stats.linregress(years, values)
-        
+
         sig_level = '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'NS'
-        
+
         real_significance[var] = {
             'slope': slope,
             'r_squared': r_value**2,
             'p_value': p_value,
             'significance': sig_level
         }
-        
-        print(f"  {var:25s}: slope={slope:8.2f}, R²={r_value**2:.3f}, p={p_value:.4f} {sig_level}")
-    
+
+        print(f"  {var:25s}: slope={slope:8.2f}, R2={r_value**2:.3f}, p={p_value:.4f} {sig_level}")
+
     results['real_per_fte_trends'] = real_per_fte_trends
     results['real_significance'] = real_significance
-    
+
     # ========================================================================
-    # 5.3 Public vs Private 對比
+    # 5.3 Public vs. Private Comparison
     # ========================================================================
-    print("\n【C. Public vs Private 對比】")
-    
+    print("\n[C. Public vs. Private Comparison]")
+
     type_results = {}
     for inst_type in ['Public', 'Private']:
-        print(f"\n--- {inst_type} Universities ---")
-        
+        print(f"\n--- {inst_type} Institutions ---")
+
         type_data = df[df['type'] == inst_type]
-        
-        # 實質Per-FTE spending
+
+        # Real per-FTE spending
         type_real = type_data.groupby('year').agg({
             'admin_per_fte_real': 'median',
             'instruction_per_fte_real': 'median',
             'total_per_fte_real': 'median'
         }).round(0)
-        
-        print("\n實質Per-FTE spending (2018$):")
+
+        print("\nReal per-FTE spending (2018$):")
         print(type_real)
-        
-        # Change率
+
+        # Change rate
+        type_change = None
         if 2018 in type_real.index and 2023 in type_real.index:
             type_change = (
-                (type_real.loc[2023] - type_real.loc[2018]) / 
+                (type_real.loc[2023] - type_real.loc[2018]) /
                 type_real.loc[2018] * 100
             ).round(1)
-            print("\n2018→2023Change:")
+            print("\n2018 -> 2023 change (%):")
             print(type_change)
-        
+
         type_results[inst_type] = {
             'real_trends': type_real,
-            'change': type_change if 2018 in type_real.index and 2023 in type_real.index else None
+            'change': type_change
         }
-    
+
     results['by_type'] = type_results
-    
+
     return results
 
+
 # ============================================================================
-# 第五部分：視覺化
+# Part 5: Visualization
 # ============================================================================
 
 def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     """
-    創建完整的趨勢視覺化
-    
-    Contains4rows3columns共12個子圖，展示：
-    - Spending Share Trends
-    - 名目Per-FTE spending
-    - 實質Per-FTE spending
-    - 實質絕對支出
-    - Public vs Private對比
-    
-    Parameters:
-    -----------
+    Create a comprehensive trend visualization with 12 subplots (4 rows x 3 columns).
+
+    Layout:
+    - Row 1: Spending share trends
+    - Row 2: Nominal per-FTE spending
+    - Row 3: Real per-FTE spending
+    - Row 4: Real absolute spending + summary of changes
+
+    Parameters
+    ----------
     df : pandas.DataFrame
-        完整處理後的數據
+        Fully processed data.
     output_path : str
-        Output file paths
+        Output file path.
     """
     print("\n" + "=" * 80)
     print("STEP 6: Creating Visualizations")
     print("=" * 80)
-    
-    # 設定風格
+
     plt.style.use('seaborn-v0_8-darkgrid')
     sns.set_palette("husl")
-    
+
     fig = plt.figure(figsize=(20, 14))
     gs = fig.add_gridspec(4, 3, hspace=0.3, wspace=0.3)
-    
+
     years = sorted(df['year'].unique())
-    
+
     # ========================================================================
-    # 第一rows：支出佔比
+    # Row 1: Spending Shares
     # ========================================================================
-    
-    # 1.1 整體佔比
+
+    # 1.1 Overall composition
     ax1 = fig.add_subplot(gs[0, 0])
     overall_pct = df.groupby('year')[['admin_pct', 'instruction_pct', 'research_pct']].mean() * 100
     ax1.plot(years, overall_pct['admin_pct'], 'o-', linewidth=2.5, markersize=8, label='Administrative')
@@ -524,8 +522,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax1.set_ylabel('% of Total Budget')
     ax1.legend()
     ax1.grid(True, alpha=0.3)
-    
-    # 1.2 Admin佔比: Public vs Private
+
+    # 1.2 Admin %: Public vs Private
     ax2 = fig.add_subplot(gs[0, 1])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['admin_pct'].mean() * 100
@@ -535,8 +533,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax2.set_ylabel('Admin %')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
-    
-    # 1.3 Instruction佔比: Public vs Private
+
+    # 1.3 Instruction %: Public vs Private
     ax3 = fig.add_subplot(gs[0, 2])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['instruction_pct'].mean() * 100
@@ -546,12 +544,12 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax3.set_ylabel('Instruction %')
     ax3.legend()
     ax3.grid(True, alpha=0.3)
-    
+
     # ========================================================================
-    # 第二rows：名目Per-FTE spending
+    # Row 2: Nominal Per-FTE Spending
     # ========================================================================
-    
-    # 2.1 Admin per FTE (名目)
+
+    # 2.1 Nominal admin per FTE
     ax4 = fig.add_subplot(gs[1, 0])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['admin_per_fte'].median()
@@ -561,8 +559,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax4.set_ylabel('$ per FTE')
     ax4.legend()
     ax4.grid(True, alpha=0.3)
-    
-    # 2.2 Instruction per FTE (名目)
+
+    # 2.2 Nominal instruction per FTE
     ax5 = fig.add_subplot(gs[1, 1])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['instruction_per_fte'].median()
@@ -572,8 +570,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax5.set_ylabel('$ per FTE')
     ax5.legend()
     ax5.grid(True, alpha=0.3)
-    
-    # 2.3 Total per FTE (名目)
+
+    # 2.3 Nominal total per FTE
     ax6 = fig.add_subplot(gs[1, 2])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['total_per_fte'].median()
@@ -583,12 +581,12 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax6.set_ylabel('$ per FTE')
     ax6.legend()
     ax6.grid(True, alpha=0.3)
-    
+
     # ========================================================================
-    # 第三rows：實質Per-FTE spending
+    # Row 3: Real Per-FTE Spending
     # ========================================================================
-    
-    # 3.1 Admin per FTE (實質)
+
+    # 3.1 Real admin per FTE
     ax7 = fig.add_subplot(gs[2, 0])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['admin_per_fte_real'].median()
@@ -598,8 +596,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax7.set_ylabel('$ per FTE (2018 dollars)')
     ax7.legend()
     ax7.grid(True, alpha=0.3)
-    
-    # 3.2 Instruction per FTE (實質)
+
+    # 3.2 Real instruction per FTE
     ax8 = fig.add_subplot(gs[2, 1])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['instruction_per_fte_real'].median()
@@ -609,8 +607,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax8.set_ylabel('$ per FTE (2018 dollars)')
     ax8.legend()
     ax8.grid(True, alpha=0.3)
-    
-    # 3.3 Total per FTE (實質)
+
+    # 3.3 Real total per FTE
     ax9 = fig.add_subplot(gs[2, 2])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['total_per_fte_real'].median()
@@ -620,12 +618,12 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax9.set_ylabel('$ per FTE (2018 dollars)')
     ax9.legend()
     ax9.grid(True, alpha=0.3)
-    
+
     # ========================================================================
-    # 第四rows：實質絕對支出 + 總結
+    # Row 4: Real Absolute Spending + Change Summary
     # ========================================================================
-    
-    # 4.1 Admin支出 (實質絕對)
+
+    # 4.1 Real admin spending (absolute)
     ax10 = fig.add_subplot(gs[3, 0])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['admin_real'].median() / 1e6
@@ -635,8 +633,8 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax10.set_ylabel('Median ($ millions)')
     ax10.legend()
     ax10.grid(True, alpha=0.3)
-    
-    # 4.2 Instruction支出 (實質絕對)
+
+    # 4.2 Real instruction spending (absolute)
     ax11 = fig.add_subplot(gs[3, 1])
     for inst_type, marker, color in [('Public', 'o', '#2E86AB'), ('Private', 's', '#A23B72')]:
         data = df[df['type'] == inst_type].groupby('year')['instruction_real'].median() / 1e6
@@ -646,95 +644,93 @@ def create_comprehensive_visualization(df, output_path=OUTPUT_VISUALIZATION):
     ax11.set_ylabel('Median ($ millions)')
     ax11.legend()
     ax11.grid(True, alpha=0.3)
-    
-    # 4.3 Change率對比圖
+
+    # 4.3 2018 -> 2023 change summary (bar chart)
     ax12 = fig.add_subplot(gs[3, 2])
     categories = ['Admin\n%', 'Instruction\n%', 'Admin\nper FTE\n(Real)', 'Instruction\nper FTE\n(Real)']
-    
-    # 計算Change率
+
     public_2018 = df[(df['type'] == 'Public') & (df['year'] == 2018)]
     public_2023 = df[(df['type'] == 'Public') & (df['year'] == 2023)]
     private_2018 = df[(df['type'] == 'Private') & (df['year'] == 2018)]
     private_2023 = df[(df['type'] == 'Private') & (df['year'] == 2023)]
-    
+
     public_changes = [
         (public_2023['admin_pct'].mean() - public_2018['admin_pct'].mean()) / public_2018['admin_pct'].mean() * 100,
         (public_2023['instruction_pct'].mean() - public_2018['instruction_pct'].mean()) / public_2018['instruction_pct'].mean() * 100,
         (public_2023['admin_per_fte_real'].median() - public_2018['admin_per_fte_real'].median()) / public_2018['admin_per_fte_real'].median() * 100,
         (public_2023['instruction_per_fte_real'].median() - public_2018['instruction_per_fte_real'].median()) / public_2018['instruction_per_fte_real'].median() * 100
     ]
-    
+
     private_changes = [
         (private_2023['admin_pct'].mean() - private_2018['admin_pct'].mean()) / private_2018['admin_pct'].mean() * 100,
         (private_2023['instruction_pct'].mean() - private_2018['instruction_pct'].mean()) / private_2018['instruction_pct'].mean() * 100,
         (private_2023['admin_per_fte_real'].median() - private_2018['admin_per_fte_real'].median()) / private_2018['admin_per_fte_real'].median() * 100,
         (private_2023['instruction_per_fte_real'].median() - private_2018['instruction_per_fte_real'].median()) / private_2018['instruction_per_fte_real'].median() * 100
     ]
-    
+
     x = np.arange(len(categories))
     width = 0.35
-    
+
     bars1 = ax12.bar(x - width/2, public_changes, width, label='Public', color='#2E86AB')
     bars2 = ax12.bar(x + width/2, private_changes, width, label='Private', color='#A23B72')
-    
+
     ax12.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
-    ax12.set_title('2018→2023 Changes', fontsize=13, fontweight='bold')
+    ax12.set_title('2018 -> 2023 Changes', fontsize=13, fontweight='bold')
     ax12.set_ylabel('% Change')
     ax12.set_xticks(x)
     ax12.set_xticklabels(categories, fontsize=9)
     ax12.legend()
     ax12.grid(True, alpha=0.3, axis='y')
-    
-    # 添加數值標籤
+
+    # Add value labels on bars
     for bars in [bars1, bars2]:
         for bar in bars:
             height = bar.get_height()
             ax12.text(bar.get_x() + bar.get_width()/2., height,
-                     f'{height:+.1f}%', ha='center', va='bottom' if height > 0 else 'top', fontsize=8)
-    
-    # 總標題
-    fig.suptitle('U.S. Higher Education Spending Trends (2018-2023)', 
+                     f'{height:+.1f}%', ha='center',
+                     va='bottom' if height > 0 else 'top', fontsize=8)
+
+    # Overall title
+    fig.suptitle('U.S. Higher Education Spending Trends (2018-2023)',
                  fontsize=16, fontweight='bold', y=0.995)
-    
-    # 保存
+
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"\n✓ Visualization saved: {output_path}")
-    
+    print(f"\nVisualization saved: {output_path}")
+
     plt.close()
 
+
 # ============================================================================
-# 第六部分：Exporting Results
+# Part 6: Exporting Results
 # ============================================================================
 
-def export_results(df_corrected, trends, output_data=OUTPUT_CORRECTED_DATA, 
+def export_results(df_corrected, trends, output_data=OUTPUT_CORRECTED_DATA,
                    output_summary=OUTPUT_SUMMARY_STATS):
     """
-    導出修正後的數據和Statistical summary
-    
-    Parameters:
-    -----------
+    Export corrected data and statistical summary.
+
+    Parameters
+    ----------
     df_corrected : pandas.DataFrame
-        修正並處理完成的數據
+        Fully processed and corrected data.
     trends : dict
-        Trend Analysis結果
+        Trend analysis results.
     output_data : str
-        修正數據輸出路徑
+        Output path for corrected data CSV.
     output_summary : str
-        Statistical summary輸出路徑
+        Output path for statistical summary CSV.
     """
     print("\n" + "=" * 80)
     print("STEP 7: Exporting Results")
     print("=" * 80)
-    
-    # 保存修正後的完整數據
+
+    # Save corrected data
     df_corrected.to_csv(output_data, index=False)
-    print(f"\n✓ Corrected data saved: {output_data}")
-    print(f"  Contains {len(df_corrected)} rows, {len(df_corrected.columns)} columns")
-    
-    # 創建Statistical summary
+    print(f"\nCorrected data saved: {output_data}")
+    print(f"  {len(df_corrected)} rows, {len(df_corrected.columns)} columns")
+
+    # Build statistical summary
     summary_rows = []
-    
-    # 整體趨勢
     for year in trends['pct_trends'].index:
         row = {
             'year': year,
@@ -744,54 +740,54 @@ def export_results(df_corrected, trends, output_data=OUTPUT_CORRECTED_DATA,
             'instruction_per_fte_real': trends['real_per_fte_trends'].loc[year, 'instruction_per_fte_real']
         }
         summary_rows.append(row)
-    
+
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(output_summary, index=False)
-    print(f"✓ Statistical summary saved: {output_summary}")
+    print(f"Statistical summary saved: {output_summary}")
+
 
 # ============================================================================
-# 主程式
+# Main
 # ============================================================================
 
 def main():
-    """
-    主函數：執rows完整的分析流程
-    """
+    """Run the complete analysis pipeline."""
     print("\n" + "=" * 80)
     print("U.S. Higher Education Spending Trends Analysis (2018-2023)")
     print("=" * 80)
     print("\nStarting analysis...\n")
-    
-    # Step 1: Loading Data
+
+    # Step 1: Load data
     df = load_and_inspect_data(INPUT_FILE)
-    
-    # Step 2: 診斷FTE問題
+
+    # Step 2: Diagnose FTE anomaly
     diagnosis = diagnose_fte_anomaly(df)
-    
-    # Step 3: 修正FTE
+
+    # Step 3: Correct FTE data
     df_corrected = correct_fte_data(df)
     df_corrected = recalculate_per_fte_metrics(df_corrected)
-    
-    # Step 4: Inflation Adjustment
+
+    # Step 4: Inflation adjustment
     df_corrected = add_inflation_adjusted_metrics(df_corrected)
-    
-    # Step 5: Trend Analysis
+
+    # Step 5: Trend analysis
     trends = calculate_trends(df_corrected)
-    
-    # Step 6: 視覺化
+
+    # Step 6: Visualization
     create_comprehensive_visualization(df_corrected)
-    
-    # Step 7: Exporting Results
+
+    # Step 7: Export results
     export_results(df_corrected, trends)
-    
+
     print("\n" + "=" * 80)
-    print("✓ Analysis complete!")
+    print("Analysis complete!")
     print("=" * 80)
     print("\nOutput files:")
-    print(f"  1. Corrected data: {OUTPUT_CORRECTED_DATA}")
-    print(f"  2. Statistical summary: {OUTPUT_SUMMARY_STATS}")
-    print(f"  3. Visualization: {OUTPUT_VISUALIZATION}")
-    print("\nThank you for using! Please contact the author with any questions。\n")
+    print(f"  1. Corrected data:       {OUTPUT_CORRECTED_DATA}")
+    print(f"  2. Statistical summary:  {OUTPUT_SUMMARY_STATS}")
+    print(f"  3. Visualization:        {OUTPUT_VISUALIZATION}")
+    print()
+
 
 if __name__ == "__main__":
     main()

@@ -1,319 +1,191 @@
-# U.S. Higher Education Spending Trends Analysis (2018-2023)
+# U.S. Higher Education Spending Analysis (2018–2023)
 
-Comprehensive time-series analysis of higher education spending, including FTE data correction, inflation adjustment, statistical testing, and visualization.
+A data-driven investigation into why U.S. college costs keep rising, analyzing 20,603 records across 3,700+ institutions using IPEDS data.
 
-## 📊 Project Overview
+---
 
-This project analyzes spending trends at U.S. higher education institutions from 2018-2023, focusing on:
-- Changes in administrative vs. instructional spending structure
-- Real spending trends after inflation adjustment
-- Differences between Public and Private universities
-- Impact of COVID-19 on higher education finances
+## Business Problem
 
-## 🔍 Key Findings
+Students pay more but get less — where does the money go?
 
-### Core Results (2018→2023)
+U.S. college tuition has risen steadily while state funding collapsed during COVID-19. This project quantifies exactly how university budgets shifted between 2018 and 2023, separating the signal (structural administrative bloat) from the noise (inflation, enrollment swings).
 
-**Spending Structure Changes:**
-- Administrative spending share: 18.5% → 19.2% (+3.8%, p=0.0018**)
-- Instructional spending share: 47.7% → 45.7% (-4.2%, p=0.0074**)
+---
 
-**Real Per-FTE Spending (Inflation-Adjusted):**
-- Admin per FTE: -9.0% (p=0.0185*)
-- **Instruction per FTE: -12.6% (p=0.0033**)** ⚠️
-- Total per FTE: -9.3% (p=0.0037**)
+## Key Findings
 
-**Public vs Private Differences:**
-- Private instructional spending real decline: -13.7% (Public only -6.7%)
-- Private administrative share is 1.9× that of Public (25.5% vs 13.5%)
+| Metric | 2018 | 2023 | Change | Significance |
+|--------|------|------|--------|--------------|
+| Admin spending share | 18.5% | 19.2% | +3.8% | p=0.0018 ** |
+| Instruction spending share | 47.7% | 45.7% | -4.2% | p=0.0074 ** |
+| Real admin per FTE | baseline | -9.0% | | p=0.0185 * |
+| Real instruction per FTE | baseline | -12.6% | | p=0.0033 ** |
 
-## 📁 File Structure
+**Private vs. Public (2023):** Private universities spend 25.5% on administration vs. 13.5% at public institutions — a 1.9x gap — yet allocate less to instruction (42.3% vs. 48.7%).
+
+**State disinvestment:** Average state funding per public-university student fell 51.7% between 2018 and 2023, shifting costs from governments to students.
+
+**Bottom line:** Universities cut teaching investment before cutting administrative overhead when budgets tightened. Students bear higher tuition while receiving proportionally less instruction.
+
+---
+
+## Tech Stack
+
+- **Python**: Pandas, NumPy, SciPy, Matplotlib, Seaborn
+- **SQL**: SQLite (window functions, CTEs, NTILE segmentation)
+- **Visualization**: Matplotlib (12-panel dashboard), Tableau
+- **Data**: IPEDS (U.S. Dept. of Education)
+
+---
+
+## Project Structure
 
 ```
-.
-├── analyze_spending_trends.py    # Main analysis script
-├── README.md                      # This file
-├── requirements.txt               # Python dependencies
-├── panel_2018_2023.csv           # Raw data (prepare yourself)
+college-tuition-analysis/
+├── analyze_spending_trends.py          # Main Python analysis script
+├── sql_data_pipeline.py                # SQL analytics pipeline (SQLite)
+├── requirements.txt                    # Python dependencies
 │
-└── outputs/                       # Output folder (auto-generated)
-    ├── panel_2018_2023_corrected.csv       # Corrected data
-    ├── trend_analysis_summary.csv          # Statistical summary
-    └── trend_analysis_comprehensive.png    # Visualization
+├── data/
+│   └── panel_2018_2023.csv             # IPEDS panel data (place here before running)
+│
+├── queries/
+│   ├── 01_state_spending_gap_ranking.sql
+│   ├── 02_yoy_spending_changes.sql
+│   └── 03_institution_tier_analysis.sql
+│
+├── outputs/                            # Auto-generated (gitignored CSVs)
+│   ├── panel_2018_2023_corrected.csv
+│   ├── trend_analysis_summary.csv
+│   ├── trend_analysis_comprehensive.png
+│   ├── query1_state_spending_gap.csv
+│   ├── query2_yoy_spending_changes.csv
+│   └── query3_institution_tier_analysis.csv
+│
+├── reports/
+│   └── final_report.md                 # Full written analysis
+│
+├── visualizations/                     # Pre-generated charts
+│
+└── docs/
+    ├── USAGE_EXAMPLES_EN.md
+    └── COLAB_GUIDE.md
 ```
 
-## 🚀 Quick Start
+---
 
-### System Requirements
+## How to Run
 
-- Python 3.8+
-- pandas
-- numpy
-- matplotlib
-- seaborn
-- scipy
-
-### Install Dependencies
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Run Analysis
+### 2. Place data file
+
+Download the IPEDS panel data and place it at `data/panel_2018_2023.csv`.
+
+### 3. Run the Python analysis
 
 ```bash
 python analyze_spending_trends.py
 ```
 
-### Expected Output
+Outputs are written to `outputs/`:
+- `panel_2018_2023_corrected.csv` — FTE-corrected, inflation-adjusted dataset
+- `trend_analysis_summary.csv` — annual trend statistics
+- `trend_analysis_comprehensive.png` — 12-panel visualization
 
-The script will generate:
-1. **Corrected Dataset** (`panel_2018_2023_corrected.csv`)
-   - FTE data corrected
-   - Includes real spending metrics
-   - Ready for further analysis
+### 4. Run the SQL pipeline
 
-2. **Statistical Summary** (`trend_analysis_summary.csv`)
-   - Annual trend statistics
-   - Key metric changes
-
-3. **Comprehensive Visualization** (`trend_analysis_comprehensive.png`)
-   - 12 subplots
-   - Complete trend display
-
-## 📖 Code Documentation
-
-### Core Function Modules
-
-#### 1. Data Loading & Inspection (`load_and_inspect_data`)
-```python
-# Load raw data and perform basic checks
-df = load_and_inspect_data('panel_2018_2023.csv')
-```
-- Read CSV file
-- Check data integrity
-- Report basic statistics
-
-#### 2. FTE Anomaly Diagnosis (`diagnose_fte_anomaly`)
-```python
-# Diagnose 2020 FTE data anomaly
-diagnosis = diagnose_fte_anomaly(df)
-```
-**Background:**
-- 2020 FTE data shows abnormal spike of +258%
-- Affects 92.2% of schools
-- Likely due to statistical method changes during COVID-19
-
-**Diagnostic Method:**
-- Calculate year-over-year change rates
-- Identify anomalous patterns
-- Quantify affected scope
-
-#### 3. FTE Data Correction (`correct_fte_data`)
-```python
-# Correct 2020-2023 FTE data
-df_corrected = correct_fte_data(df, threshold=2.0)
-```
-**Correction Strategy:**
-1. Identify anomalous schools (2020/2019 > 2×)
-2. Calculate normal 2018-2019 growth rate
-3. Extrapolate this rate to 2020-2023
-4. Recalculate per_fte metrics
-
-**Mathematical Formula:**
-```
-growth_rate = (FTE_2019 - FTE_2018) / FTE_2018
-FTE_2020_corrected = FTE_2019 × (1 + growth_rate)
-FTE_2021_corrected = FTE_2020_corrected × (1 + growth_rate)
-...
+```bash
+python sql_data_pipeline.py
 ```
 
-#### 4. Inflation Adjustment (`add_inflation_adjusted_metrics`)
-```python
-# Add real metrics (2018 dollars)
-df_corrected = add_inflation_adjusted_metrics(df_corrected)
-```
-**CPI Deflator:**
-- 2018: 1.00 (base year)
-- 2019: 1.02 (+2%)
-- 2020: 1.03 (+1%)
-- 2021: 1.08 (+5%)
-- 2022: 1.16 (+8%)
-- 2023: 1.20 (+4%)
+Outputs are written to `outputs/`:
+- `query1_state_spending_gap.csv` — state-level admin vs. instruction gap ranking
+- `query2_yoy_spending_changes.csv` — year-over-year changes per institution
+- `query3_institution_tier_analysis.csv` — institution tier segmentation
 
-**Calculation Formula:**
-```
-real_value = nominal_value / CPI_deflator[year]
-```
+### 5. Run in Google Colab
 
-#### 5. Trend Analysis (`calculate_trends`)
-```python
-# Perform comprehensive trend analysis
-trends = calculate_trends(df_corrected)
-```
-**Includes:**
-- Spending share trends (admin_pct, instruction_pct)
-- Nominal per-FTE spending trends
-- Real per-FTE spending trends
-- Public vs Private group analysis
-- Linear regression significance tests
-
-**Statistical Method:**
-```python
-slope, intercept, r_value, p_value, std_err = stats.linregress(years, values)
-# slope: annual rate of change
-# r_value²: trend explanatory power
-# p_value: significance level
-```
-
-#### 6. Visualization (`create_comprehensive_visualization`)
-```python
-# Create comprehensive visualization with 12 subplots
-create_comprehensive_visualization(df_corrected)
-```
-**Chart Layout (4 rows × 3 columns):**
-- Row 1: Spending share trends
-- Row 2: Nominal per-FTE spending
-- Row 3: Real per-FTE spending
-- Row 4: Real absolute spending + change summary
-
-## 🔧 Customization
-
-### Modify CPI Deflator
-
-To use different inflation data:
-
-```python
-# Modify in analyze_spending_trends.py
-CPI_DEFLATOR = {
-    2018: 1.00,
-    2019: 1.02,  # Custom value
-    2020: 1.03,
-    # ...
-}
-```
-
-### Adjust Anomaly Threshold
-
-Correct more or fewer FTE anomalies:
-
-```python
-# Default threshold is 2.0 (i.e., >100% growth)
-df_corrected = correct_fte_data(df, threshold=1.5)  # Stricter
-df_corrected = correct_fte_data(df, threshold=3.0)  # More lenient
-```
-
-### Change Output Paths
-
-```python
-# Modify in configuration section at top of script
-OUTPUT_CORRECTED_DATA = 'your_path/corrected_data.csv'
-OUTPUT_VISUALIZATION = 'your_path/visualization.png'
-```
-
-## 📊 Data Source
-
-**IPEDS (Integrated Postsecondary Education Data System)**
-- Source: U.S. Department of Education
-- URL: https://nces.ed.gov/ipeds/
-- Coverage: All federally-funded higher education institutions
-- Period: 2018-2023 academic years
-
-**Key Variables:**
-- `admin`: Administrative and general institutional spending
-- `instruction`: Instructional spending (faculty salaries, course costs)
-- `research`: Research spending
-- `fte`: Full-Time Equivalent student count
-- `type`: Public/Private
-
-## 🧪 Methodology
-
-### Statistical Tests
-
-**Linear Regression Trend Tests:**
-- Null hypothesis (H₀): No trend (slope = 0)
-- Alternative hypothesis (H₁): Trend exists (slope ≠ 0)
-- Significance level: α = 0.05
-
-**Significance Standards:**
-- `***`: p < 0.001 (extremely significant)
-- `**`: p < 0.01 (very significant)
-- `*`: p < 0.05 (significant)
-- `NS`: p ≥ 0.05 (not significant)
-
-### Robustness Measures
-
-**Using Medians Instead of Means:**
-- Avoid influence of outliers
-- More robust estimates
-
-**Group Validation:**
-- Separate analysis for Public vs Private
-- Confirm trend consistency
-
-**Multi-Metric Cross-Validation:**
-- Shares + absolute values + per-capita values
-- Triple verification ensures reliable conclusions
-
-## ⚠️ Research Limitations
-
-1. **Causality**
-   - This is descriptive analysis
-   - Cannot establish causal relationships
-   - Reports correlations and trends only
-
-2. **Data Quality**
-   - FTE data requires correction
-   - Relies on institutional self-reporting
-   - Potential measurement errors
-
-3. **External Validity**
-   - Results apply to U.S. higher education only
-   - Situations may differ in other countries
-
-4. **Unobserved Variables**
-   - Lacks faculty data
-   - Lacks student outcome data
-   - Cannot assess educational quality changes
-
-## 📝 Citation
-
-If you use this analysis in research or projects, please cite:
-
-```
-YUN TING SU. (2026). U.S. Higher Education Spending Trends Analysis (2018-2023).
-GitHub repository: https://github.com/your-username/your-repo
-```
-
-## 🤝 Contributing
-
-Contributions welcome! Please follow these steps:
-
-1. Fork this project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📧 Contact
-
-For questions or suggestions, please contact through:
-
-- GitHub Issues: [Create issue here]
-- Email: kt0704@bu.edu
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
-
-## 🙏 Acknowledgments
-
-- U.S. Department of Education IPEDS for data provision
-- U.S. Bureau of Labor Statistics for CPI data
-- Anthropic Claude for analysis and documentation assistance
+See [docs/COLAB_GUIDE.md](docs/COLAB_GUIDE.md) for step-by-step Colab instructions.
 
 ---
 
-**Last Updated:** February 4, 2026  
-**Version:** 1.0.0  
-**Status:** Stable Release
+## Methodology
+
+### Data Processing
+
+- **FTE correction**: 2020 FTE data shows a system-wide +258% spike (affecting 92.2% of institutions), likely from COVID-era methodology changes. Anomalous values are replaced by extrapolating each institution's 2018–2019 growth rate forward.
+- **Inflation adjustment**: All nominal spending converted to constant 2018 dollars using BLS CPI deflators (cumulative inflation 2018–2023: +20%).
+- **Robustness**: Medians used throughout to resist outlier distortion from elite research universities.
+
+### Statistical Methods
+
+| Test | Use case |
+|------|----------|
+| Linear regression | Time-trend significance (slope ≠ 0) |
+| Paired t-test | Same-institution 2018 vs. 2023 comparison |
+| Independent t-test | Public vs. private differences |
+| Cohen's d | Effect size for practical significance |
+
+Significance thresholds: `***` p < 0.001, `**` p < 0.01, `*` p < 0.05.
+
+### SQL Queries
+
+1. **State spending gap ranking** — CTE-based 2018→2023 admin vs. instruction delta, ranked with `RANK()` window function
+2. **Year-over-year changes** — `LAG()` and `FIRST_VALUE()` window functions for per-institution temporal comparison
+3. **Institution tier segmentation** — `NTILE(3)` dynamic percentile cutoffs to classify institutions as high/medium/low admin spenders, then aggregate by tier
+
+---
+
+## Data Source
+
+**IPEDS (Integrated Postsecondary Education Data System)**
+- Provider: U.S. Department of Education, National Center for Education Statistics
+- URL: https://nces.ed.gov/ipeds/
+- Surveys: Finance (F1A/F2), Institutional Characteristics (HD), Enrollment (EFFY)
+- Coverage: 2018–2023 academic years, all federally-funded institutions
+
+**Key variables:**
+- `admin` — Administrative and general institutional support spending
+- `instruction` — Instructional spending (faculty salaries, course costs)
+- `research` — Research spending
+- `fte` — Full-Time Equivalent student enrollment
+- `type` — Public (GASB) or Private Nonprofit (FASB)
+- `state` — State appropriations (public institutions only)
+
+---
+
+## Research Limitations
+
+1. **Descriptive only** — Trend correlations are identified; causal relationships require further study.
+2. **Self-reported data** — Relies on institutional IPEDS submissions; measurement error is possible.
+3. **Missing variables** — Federal funding, endowment income, and faculty counts are not included.
+4. **U.S. scope** — Findings apply to U.S. higher education; international comparison is out of scope.
+
+---
+
+## Citation
+
+```
+Yun-Ting Su. (2026). U.S. Higher Education Spending Trends Analysis (2018-2023).
+GitHub: https://github.com/Katherine-code-web/college-tuition-analysis
+```
+
+---
+
+## Author
+
+**Yun-Ting Su** | Boston University MSBA
+[kt0704@bu.edu](mailto:kt0704@bu.edu) | [linkedin.com/in/yun-ting-su-867b70364](https://linkedin.com/in/yun-ting-su-867b70364)
+
+---
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+
+**Data source:** U.S. Department of Education IPEDS | CPI data: U.S. Bureau of Labor Statistics
