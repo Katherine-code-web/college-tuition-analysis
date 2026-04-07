@@ -33,8 +33,36 @@ U.S. college tuition has risen steadily while state funding collapsed during COV
 
 - **Python**: Pandas, NumPy, SciPy, Matplotlib, Seaborn
 - **SQL**: SQLite (window functions, CTEs, NTILE segmentation)
-- **Visualization**: Matplotlib (12-panel dashboard), Tableau
-- **Data**: IPEDS (U.S. Dept. of Education)
+- **Visualization**: Matplotlib (12-panel dashboard), Plotly, Tableau
+- **Web App**: Streamlit (multipage interactive platform)
+- **AI**: Anthropic Claude API (conversational advisor)
+- **Data**: IPEDS (U.S. Dept. of Education), College Scorecard API
+
+---
+
+## Interactive Platform
+
+A Streamlit web app that makes the research accessible and actionable for students, parents, and advisors.
+
+**Run it locally:**
+
+```bash
+streamlit run app.py
+```
+
+The app supports both **English** and **Traditional Chinese (繁體中文)**.
+
+### Pages
+
+| Page | Description |
+|------|-------------|
+| 🔍 University Search | Search any U.S. college and get an integrated profile: tuition, employment outcomes, CP value score, and scholarship recommendations |
+| 📊 CP Value Dashboard | Compare up to 5 colleges side-by-side on cost, earnings, debt-to-income, and ROI score with interactive charts |
+| 🎓 Scholarship & Aid | Browse federal, state, and external scholarship options with eligibility filters and loan repayment calculator |
+| 📈 Spending Trends | Explore the IPEDS spending analysis interactively — filter by year range and institution type |
+| 🤖 AI Advisor | Conversational advisor powered by Claude that queries real College Scorecard data and answers questions in plain language |
+
+The CP Value score is calculated as: **10-year median earnings ÷ annual net price × graduation rate**. Scores are visualized with animal mascot tiers (Tiger 🐯, Fox 🦊, Koala 🐨, Sloth 🦥).
 
 ---
 
@@ -44,29 +72,37 @@ U.S. college tuition has risen steadily while state funding collapsed during COV
 college-tuition-analysis/
 ├── analyze_spending_trends.py          # Main Python analysis script
 ├── sql_data_pipeline.py                # SQL analytics pipeline (SQLite)
+├── app.py                              # Streamlit app entry point
 ├── requirements.txt                    # Python dependencies
 │
+├── pages/                              # Streamlit multipage app
+│   ├── 1_University_Search.py
+│   ├── 2_CP_Value_Dashboard.py
+│   ├── 3_Scholarship_Aid.py
+│   ├── 4_Spending_Trends.py
+│   └── 5_AI_Advisor.py
+│
+├── utils/                              # App utilities and helpers
+│   ├── __init__.py
+│   ├── advisors.py
+│   ├── api.py
+│   ├── calculations.py
+│   ├── scholarships.py
+│   ├── theme.py
+│   └── translations.py
+│
 ├── data/
-│   └── panel_2018_2023.csv             # IPEDS panel data (place here before running)
+│   └── panel_2018_2023.csv             # IPEDS panel data
 │
 ├── queries/
 │   ├── 01_state_spending_gap_ranking.sql
 │   ├── 02_yoy_spending_changes.sql
 │   └── 03_institution_tier_analysis.sql
 │
-├── outputs/                            # Auto-generated (gitignored CSVs)
-│   ├── panel_2018_2023_corrected.csv
-│   ├── trend_analysis_summary.csv
-│   ├── trend_analysis_comprehensive.png
-│   ├── query1_state_spending_gap.csv
-│   ├── query2_yoy_spending_changes.csv
-│   └── query3_institution_tier_analysis.csv
-│
+├── outputs/                            # Auto-generated analysis results
 ├── reports/
-│   └── final_report.md                 # Full written analysis
-│
+│   └── final_report.md
 ├── visualizations/                     # Pre-generated charts
-│
 └── docs/
     ├── USAGE_EXAMPLES_EN.md
     └── COLAB_GUIDE.md
