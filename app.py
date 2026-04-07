@@ -4,7 +4,9 @@ Home page — entry point for Streamlit multipage app
 """
 
 import streamlit as st
+from utils.theme import get_theme_css
 from utils.translations import t, T
+from utils.advisors import ADVISORS, DEFAULT_ADVISOR
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -13,10 +15,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+st.markdown(get_theme_css(), unsafe_allow_html=True)
+
 
 # ── Language selector (persisted in session state) ────────────────────────────
 if "lang" not in st.session_state:
     st.session_state.lang = "en"
+
+if "advisor" not in st.session_state:
+    st.session_state.advisor = DEFAULT_ADVISOR
 
 with st.sidebar:
     lang_choice = st.selectbox(
@@ -28,114 +35,118 @@ with st.sidebar:
     lang = st.session_state.lang
 
     st.markdown("---")
-    st.markdown("**Navigate / 導覽**")
-    st.markdown(
-        "Use the pages below 👇  \n"
-        "使用下方頁面導覽 👇"
-        if lang == "en"
-        else "使用下方頁面導覽 👇"
+
+    # Advisor selector
+    st.markdown("**🐾 Choose Your Advisor / 選擇你的顧問**")
+    advisor_keys = list(ADVISORS.keys())
+    name_field = "animal_en" if lang == "en" else "animal_zh"
+    advisor_labels = [
+        f"{ADVISORS[k]['emoji']} {ADVISORS[k][name_field]}" for k in advisor_keys
+    ]
+    current_idx = advisor_keys.index(st.session_state.advisor) if st.session_state.advisor in advisor_keys else 0
+    chosen_label = st.selectbox(
+        "Advisor",
+        advisor_labels,
+        index=current_idx,
+        label_visibility="collapsed",
     )
+    chosen_key = advisor_keys[advisor_labels.index(chosen_label)]
+    if chosen_key != st.session_state.advisor:
+        st.session_state.advisor = chosen_key
+        # Reset chat when advisor changes
+        st.session_state.messages = []
+
+    adv = ADVISORS[chosen_key]
+    tagline_field = "tagline_en" if lang == "en" else "tagline_zh"
+    name_field2 = "name_en" if lang == "en" else "name_zh"
+    st.caption(f"*\"{adv[tagline_field]}\"*")
+
     st.markdown("---")
     st.caption(t("data_source", lang))
 
 lang = st.session_state.lang
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
-st.title(f"🎓 {t('app_title', lang)}")
-st.markdown(f"#### {t('app_subtitle', lang)}")
+adv_home = ADVISORS[st.session_state.get("advisor", DEFAULT_ADVISOR)]
+st.markdown(f"""
+<div style="
+    background: linear-gradient(135deg, #FF8C42, #FFD166);
+    border: 3px solid #1A1A1A;
+    border-radius: 18px;
+    box-shadow: 6px 6px 0px #1A1A1A;
+    padding: 32px 36px;
+    margin-bottom: 24px;
+">
+    <div style="font-family:'Fredoka One',cursive; font-size:2.6rem; color:#1A1A1A; line-height:1.2;">
+        {adv_home['emoji']} {t('app_title', lang)}
+    </div>
+    <div style="font-family:'Nunito',sans-serif; font-weight:800; font-size:1.1rem; color:#1A1A1A; margin-top:8px; opacity:0.85;">
+        {t('app_subtitle', lang)}
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Features grid — single HTML block, no columns ────────────────────────────
+st.markdown(f"### ✨ {t('home_features', lang)}")
+
+feat_items = [
+    ("🔍", t('feat_search', lang),  "#DDEEFF", "#4D96FF"),
+    ("📊", t('feat_roi', lang),     "#FFDDD8", "#E8503A"),
+    ("🎓", t('feat_aid', lang),     "#DDFAE4", "#6BCB77"),
+    ("📈", t('feat_trend', lang),   "#EDE0FF", "#9B5DE5"),
+]
+
+cards_html = "".join([
+    f"""<div style="flex:1;min-width:180px;background:{bg};border:2.5px solid #1A1A1A;
+        border-radius:14px;padding:20px 14px;text-align:center;margin:6px;">
+        <div style="font-size:2rem;">{icon}</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;
+            color:#1A1A1A;margin-top:8px;line-height:1.3;">{label}</div>
+    </div>"""
+    for icon, label, bg, color in feat_items
+])
+
+st.markdown(
+    f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">{cards_html}</div>',
+    unsafe_allow_html=True,
+)
+
 st.markdown("---")
 
-# ── Features grid ─────────────────────────────────────────────────────────────
-st.subheader(t("home_features", lang))
-
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.info(f"🔍 **{t('feat_search', lang)}**")
-with col2:
-    st.success(f"📊 **{t('feat_roi', lang)}**")
-with col3:
-    st.warning(f"🎓 **{t('feat_aid', lang)}**")
-with col4:
-    st.error(f"📈 **{t('feat_trend', lang)}**")
-
-st.markdown("---")
-
-# ── How CP Value works ────────────────────────────────────────────────────────
+# ── How CP Value works — single HTML block ────────────────────────────────────
 if lang == "en":
     st.subheader("How We Calculate CP Value (ROI Score)")
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        st.metric("Value Score formula", "10-yr Earnings ÷ Net Price")
-        st.caption("Higher = more earning power per tuition dollar paid")
-    with col_b:
-        st.metric("Debt-to-Income formula", "Median Debt ÷ 10-yr Earnings")
-        st.caption("Lower = more manageable loan burden after graduation")
-    with col_c:
-        st.metric("Payback Years formula", "(Net Price × 4) ÷ 10-yr Earnings")
-        st.caption("How many years of post-grad income covers your total tuition")
+    formulas = [
+        ("📈", "Value Score", "10-yr Earnings ÷ Net Price", "Higher = better ROI per tuition dollar", "#DDFAE4"),
+        ("💳", "Debt-to-Income", "Median Debt ÷ 10-yr Earnings", "Lower = more manageable after graduation", "#FFF5CC"),
+        ("📅", "Payback Years", "(Net Price × 4) ÷ 10-yr Earnings", "Years of post-grad income to cover tuition", "#DDEEFF"),
+    ]
 else:
     st.subheader("CP 值計算方式")
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        st.metric("CP 值分數公式", "10年後薪資 ÷ 實際年學費")
-        st.caption("分數越高，每一塊學費買到的薪資潛力越大")
-    with col_b:
-        st.metric("負債收入比公式", "中位學貸 ÷ 10年後薪資")
-        st.caption("比率越低，畢業後的還款壓力越小")
-    with col_c:
-        st.metric("回本年數公式", "（實際年學費 × 4）÷ 10年後薪資")
-        st.caption("幾年薪資可以還清四年學費")
+    formulas = [
+        ("📈", "CP 值分數", "10年後薪資 ÷ 實際年學費", "分數越高，每一塊學費買到的薪資潛力越大", "#DDFAE4"),
+        ("💳", "負債收入比", "中位學貸 ÷ 10年後薪資", "比率越低，畢業後的還款壓力越小", "#FFF5CC"),
+        ("📅", "回本年數", "（實際年學費 × 4）÷ 10年後薪資", "幾年薪資可以還清四年學費", "#DDEEFF"),
+    ]
 
-st.markdown("---")
+formula_html = "".join([
+    f"""<div style="flex:1;min-width:220px;background:{bg};border:2.5px solid #1A1A1A;
+        border-radius:14px;padding:18px 16px;margin:6px;">
+        <div style="font-size:1.5rem;">{icon}</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;margin:6px 0 4px;">{name}</div>
+        <div style="font-family:'Nunito',sans-serif;font-weight:800;font-size:0.95rem;
+            background:white;border:2px solid #1A1A1A;border-radius:8px;
+            padding:4px 10px;display:inline-block;margin-bottom:8px;">{formula}</div>
+        <div style="font-size:0.82rem;color:#555;font-family:'Nunito',sans-serif;
+            font-weight:700;">{caption}</div>
+    </div>"""
+    for icon, name, formula, caption, bg in formulas
+])
 
-# ── Quick explainer ───────────────────────────────────────────────────────────
-if lang == "en":
-    with st.expander("What is 'Net Price'? Why not just list tuition?"):
-        st.markdown(
-            """
-            **Net Price** is the average amount students actually pay after grants and scholarships —
-            it's a far better measure of real cost than the sticker tuition price.
-
-            For example, a school may list $60,000/year tuition but the average student
-            only pays $25,000 after financial aid. We use net price wherever possible.
-
-            > Source: College Scorecard reports net price for first-time, full-time undergraduates
-            receiving Title IV federal financial aid.
-            """
-        )
-    with st.expander("What does '10-year earnings' mean?"):
-        st.markdown(
-            """
-            The **median earnings 10 years after enrollment** is reported by the U.S. Department
-            of Education. It reflects the midpoint salary of all students who attended that school
-            (not just graduates), 10 years after they first enrolled.
-
-            This is a real-world outcome measure — it captures what students are actually earning,
-            not what the school claims they'll earn.
-            """
-        )
-else:
-    with st.expander("什麼是「實際學費」？為什麼不用標示學費？"):
-        st.markdown(
-            """
-            **實際學費（Net Price）** 是學生在扣除助學金與獎學金後實際支付的平均金額，
-            比標示學費更能反映真實負擔。
-
-            例如，一所學校標示學費 $60,000/年，但平均學生在助學金後只需付 $25,000。
-            我們盡量使用實際學費作為計算基礎。
-
-            > 資料來源：College Scorecard 統計的是首次全職就讀、獲得聯邦助學資格學生的實際學費。
-            """
-        )
-    with st.expander("「10年後薪資」是什麼意思？"):
-        st.markdown(
-            """
-            **入學 10 年後的中位薪資** 由美國教育部提供，反映所有曾就讀該校學生
-            （包含未畢業者）在入學 10 年後的薪資中位數。
-
-            這是真實的就業結果數據——反映學生的實際薪資，而非學校的宣傳數字。
-            """
-        )
+st.markdown(
+    f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">{formula_html}</div>',
+    unsafe_allow_html=True,
+)
 
 st.markdown("---")
 st.caption(

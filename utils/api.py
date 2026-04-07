@@ -41,6 +41,70 @@ FIELDS = ",".join([
 OWNERSHIP_MAP = {1: "Public", 2: "Private Nonprofit", 3: "Private For-Profit"}
 OWNERSHIP_MAP_ZH = {1: "公立", 2: "私立非營利", 3: "私立營利"}
 
+# Common abbreviations that don't match API school names directly
+SCHOOL_ALIASES = {
+    "mit": "Massachusetts Institute of Technology",
+    "ucla": "University of California-Los Angeles",
+    "ucsd": "University of California-San Diego",
+    "ucsb": "University of California-Santa Barbara",
+    "usc": "University of Southern California",
+    "nyu": "New York University",
+    "bu": "Boston University",
+    "neu": "Northeastern University",
+    "bc": "Boston College",
+    "cmu": "Carnegie Mellon",
+    "gatech": "Georgia Institute of Technology",
+    "gt": "Georgia Institute of Technology",
+    "uw": "University of Washington-Seattle",
+    "uiuc": "University of Illinois Urbana-Champaign",
+    "umich": "University of Michigan-Ann Arbor",
+    "unc": "University of North Carolina at Chapel Hill",
+    "vt": "Virginia Polytechnic",
+    "pitt": "University of Pittsburgh",
+    "tamu": "Texas A&M University-College Station",
+    "osu": "Ohio State University-Main Campus",
+    "uva": "University of Virginia-Main Campus",
+    "wustl": "Washington University in St Louis",
+    "upenn": "University of Pennsylvania",
+    "caltech": "California Institute of Technology",
+    # Common misspellings
+    "havard": "Harvard University",
+    "harvad": "Harvard University",
+    "harverd": "Harvard University",
+    "stanfod": "Stanford University",
+    "standford": "Stanford University",
+    "priinceton": "Princeton University",
+    "princton": "Princeton University",
+    "columiba": "Columbia University",
+    "berkley": "University of California-Berkeley",
+    "berkely": "University of California-Berkeley",
+    "cornnel": "Cornell University",
+    "yael": "Yale University",
+    "pensylvania": "University of Pennsylvania",
+    "carnegi": "Carnegie Mellon University",
+    "chicgo": "University of Chicago",
+    "notredam": "University of Notre Dame",
+    "vandrebilt": "Vanderbilt University",
+    "geortown": "Georgetown University",
+    "michagan": "University of Michigan-Ann Arbor",
+    "notheastern": "Northeastern University",
+    "northeasten": "Northeastern University",
+    # Chinese aliases
+    "麻省理工": "Massachusetts Institute of Technology",
+    "哈佛": "Harvard",
+    "耶魯": "Yale",
+    "史丹佛": "Stanford",
+    "普林斯頓": "Princeton",
+    "哥倫比亞": "Columbia",
+    "康乃爾": "Cornell",
+    "賓大": "University of Pennsylvania",
+    "卡內基美隆": "Carnegie Mellon",
+    "波士頓大學": "Boston University",
+    "東北大學": "Northeastern University",
+    "南加大": "University of Southern California",
+    "紐約大學": "New York University",
+}
+
 
 def get_api_key() -> str:
     key = os.getenv("COLLEGE_SCORECARD_API_KEY", "")
@@ -77,7 +141,9 @@ def search_schools(
         "_sort": "latest.completion.rate_suppressed.overall:desc",
     }
     if name:
-        params["school.name"] = name
+        # Resolve common abbreviations and Chinese aliases
+        resolved = SCHOOL_ALIASES.get(name.lower().strip(), name)
+        params["school.name"] = resolved
     if state and state not in ("All", ""):
         params["school.state"] = state
     if ownership:
@@ -87,7 +153,27 @@ def search_schools(
         resp = requests.get(API_BASE, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
-        return data.get("results", []), data.get("metadata", {}).get("total", 0)
+        results = data.get("results", [])
+        total = data.get("metadata", {}).get("total", 0)
+
+        # If no results and a name was given, try fuzzy fallback:
+        # strip last char (catches 1-char typos at end like "Havard" → "Harar" → skip,
+        # better: try without last char progressively)
+        if not results and name and len(name) >= 5:
+            fallback_name = SCHOOL_ALIASES.get(name[:-1].lower().strip())
+            if not fallback_name:
+                # Try dropping last character as fuzzy match
+                fallback_params = dict(params)
+                fallback_params["school.name"] = name[:-1]
+                try:
+                    fb_resp = requests.get(API_BASE, params=fallback_params, timeout=15)
+                    fb_data = fb_resp.json()
+                    results = fb_data.get("results", [])
+                    total = fb_data.get("metadata", {}).get("total", 0)
+                except Exception:
+                    pass
+
+        return results, total
     except requests.RequestException as e:
         st.error(f"API request failed: {e}")
         return [], 0

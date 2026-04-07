@@ -4,12 +4,15 @@ Federal aid guide, external scholarships, and school-specific aid lookup.
 """
 
 import streamlit as st
+from utils.theme import get_theme_css
 import pandas as pd
 from utils.translations import t
 from utils.api import search_schools, results_to_df, fmt_pct
 from utils.scholarships import EXTERNAL_SCHOLARSHIPS, LOAN_TYPES
 
 st.set_page_config(page_title="Scholarships & Aid", page_icon="🎓", layout="wide")
+st.markdown(get_theme_css(), unsafe_allow_html=True)
+
 
 lang = st.session_state.get("lang", "en")
 

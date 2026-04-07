@@ -4,6 +4,7 @@ Integrates existing IPEDS analysis: how colleges allocate tuition revenue.
 """
 
 import streamlit as st
+from utils.theme import get_theme_css
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -11,6 +12,8 @@ import os
 from utils.translations import t
 
 st.set_page_config(page_title="Spending Trends", page_icon="📈", layout="wide")
+st.markdown(get_theme_css(), unsafe_allow_html=True)
+
 
 lang = st.session_state.get("lang", "en")
 
@@ -23,15 +26,27 @@ st.markdown("---")
 
 # ── Key findings (static, always shown) ──────────────────────────────────────
 st.subheader(t("trend_key_findings", lang))
-f1, f2, f3, f4 = st.columns(4)
-with f1:
-    st.error(f"📉 {t('trend_finding1', lang)}")
-with f2:
-    st.warning(f"📈 {t('trend_finding2', lang)}")
-with f3:
-    st.info(f"🏛 {t('trend_finding3', lang)}")
-with f4:
-    st.error(f"🏛 {t('trend_finding4', lang)}")
+
+findings = [
+    ("📉", t("trend_finding1", lang), "#FFDDD8", "#E8503A"),
+    ("📈", t("trend_finding2", lang), "#FFF5CC", "#D4900A"),
+    ("🏛",  t("trend_finding3", lang), "#DDEEFF", "#4D96FF"),
+    ("🏛",  t("trend_finding4", lang), "#FFDDD8", "#E8503A"),
+]
+cards_html = "".join([
+    f"""<div style="flex:1;min-width:200px;background:{bg};
+        border:2.5px solid #1A1A1A;border-radius:12px;
+        padding:14px 12px;margin:6px;
+        font-family:'Nunito',sans-serif;font-weight:700;font-size:0.88rem;color:#1A1A1A;
+        line-height:1.4;">
+        <span style="font-size:1.3rem;">{icon}</span>&nbsp;{text}
+    </div>"""
+    for icon, text, bg, border in findings
+])
+st.markdown(
+    f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;">{cards_html}</div>',
+    unsafe_allow_html=True,
+)
 
 st.markdown("---")
 
@@ -248,12 +263,12 @@ if "STABBR" in fdf.columns:
 
 # ── Data download ─────────────────────────────────────────────────────────────
 st.markdown("---")
-with st.expander("Download filtered data / 下載篩選後資料"):
-    st.dataframe(fdf.head(200), use_container_width=True)
-    csv = fdf.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download CSV",
-        csv,
-        file_name="ipeds_filtered.csv",
-        mime="text/csv",
-    )
+st.subheader("Download Filtered Data / 下載篩選後資料" if lang == "en" else "下載篩選後資料")
+st.dataframe(fdf.head(200), use_container_width=True)
+csv = fdf.to_csv(index=False).encode("utf-8")
+st.download_button(
+    "⬇️ Download CSV" if lang == "en" else "⬇️ 下載 CSV",
+    csv,
+    file_name="ipeds_filtered.csv",
+    mime="text/csv",
+)

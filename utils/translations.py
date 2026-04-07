@@ -45,8 +45,8 @@ T = {
         "stat_source": "Data Updated",
 
         # --- University Search ---
-        "search_title": "University Search",
-        "search_desc": "Search any U.S. college and view its key financial and academic metrics.",
+        "search_title": "School Profile",
+        "search_desc": "Search any U.S. college to see tuition, CP value, employment outcomes, and recommended scholarships — all in one place.",
         "search_placeholder": "e.g. Boston University, UCLA, MIT",
         "filter_state": "Filter by State",
         "filter_type": "Institution Type",
@@ -201,8 +201,8 @@ T = {
         "stat_source": "資料更新",
 
         # --- University Search ---
-        "search_title": "大學搜尋",
-        "search_desc": "搜尋任何美國大學，查看關鍵財務與學術指標。",
+        "search_title": "學校詳情",
+        "search_desc": "搜尋任何美國大學，一次查看學費、CP值、就業結果與推薦獎學金。",
         "search_placeholder": "例如：Boston University, UCLA, MIT",
         "filter_state": "依州別篩選",
         "filter_type": "學校類型",
