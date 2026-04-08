@@ -2,6 +2,8 @@
 
 A data-driven investigation into why U.S. college costs keep rising, analyzing 20,603 records across 3,700+ institutions using IPEDS data.
 
+**[Live Demo](https://college-tuition-analysis-fs6nvwvymfu5qgqpnrw4pd.streamlit.app/)**
+
 ---
 
 ## Business Problem
