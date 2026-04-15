@@ -9,8 +9,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from utils.translations import t
-from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct
-from utils.calculations import enrich_df, score_label, debt_label, get_cp_animal
+from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct, get_school_programs
+from utils.calculations import (
+    enrich_df, score_label, debt_label, get_cp_animal,
+    programs_to_df, CIP_CATEGORIES, CIP_CATEGORIES_ZH,
+)
 
 st.set_page_config(page_title="CP Value Dashboard", page_icon="📊", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
@@ -319,4 +322,154 @@ if len(chart_df) >= 2:
     st.caption(
         "All axes normalized 0–1. Higher = better on all dimensions."
         if lang == "en" else "所有軸已標準化為 0–1，數值越高越好。"
+    )
+
+# ── Field of Study section ────────────────────────────────────────────────────
+st.markdown("---")
+st.subheader("📚 " + t("filter_field_of_study", lang))
+st.caption(
+    "Select a field of study to compare the same program across your selected schools."
+    if lang == "en"
+    else "選擇一個科系領域，跨校比較該科系的薪資與學貸資料。"
+)
+
+# CIP category selector
+cip_cat_labels = CIP_CATEGORIES if lang == "en" else CIP_CATEGORIES_ZH
+cip_options = {
+    ("All Fields" if lang == "en" else "全部科系"): None,
+    **{f"{k} — {v}": k for k, v in cip_cat_labels.items()},
+}
+selected_cip_label = st.selectbox(
+    t("major_filter_field", lang),
+    list(cip_options.keys()),
+    key="cp_dash_cip_select",
+)
+selected_cip_2digit = cip_options[selected_cip_label]
+
+# Credential level selector
+from utils.calculations import CRED_LEVEL_MAP, CRED_LEVEL_MAP_ZH
+cred_map = CRED_LEVEL_MAP if lang == "en" else CRED_LEVEL_MAP_ZH
+cred_filter_options = {
+    ("All Levels" if lang == "en" else "全部層級"): None,
+    **{v: k for k, v in cred_map.items()},
+}
+selected_cred_label = st.selectbox(
+    t("major_filter_cred", lang),
+    list(cred_filter_options.keys()),
+    key="cp_dash_cred_select",
+)
+selected_cred_level = cred_filter_options[selected_cred_label]
+
+# Fetch & aggregate program data for all compared schools
+if st.button(
+    "🔬 " + ("Load Program Data" if lang == "en" else "載入科系資料"),
+    key="cp_load_programs",
+):
+    st.session_state.cp_program_data = {}
+    with st.spinner(t("programs_loading", lang)):
+        for school in st.session_state.compare_schools:
+            sid = school.get("id")
+            if sid:
+                raw = get_school_programs(int(sid))
+                if raw:
+                    pdf = programs_to_df(
+                        raw,
+                        school_net_price=school.get("net_price"),
+                        school_completion_rate=school.get("completion_rate"),
+                    )
+                    pdf["school_name"] = school["name"]
+                    st.session_state.cp_program_data[school["name"]] = pdf
+
+if "cp_program_data" in st.session_state and st.session_state.cp_program_data:
+    all_prog_dfs = []
+    for sname, pdf in st.session_state.cp_program_data.items():
+        all_prog_dfs.append(pdf)
+
+    if all_prog_dfs:
+        combined = pd.concat(all_prog_dfs, ignore_index=True)
+
+        # Apply CIP and credential filters
+        if selected_cip_2digit:
+            combined = combined[combined["cip_2digit"] == selected_cip_2digit]
+        if selected_cred_level is not None:
+            combined = combined[combined["cred_level"] == selected_cred_level]
+
+        combined = combined.dropna(subset=["median_earnings"])
+
+        if combined.empty:
+            st.info(t("major_no_programs", lang))
+        else:
+            st.markdown("#### " + t("chart_earn_debt_scatter", lang))
+            cred_label_col = "cred_label" if lang == "en" else "cred_label_zh"
+            fig_scatter = px.scatter(
+                combined,
+                x="median_debt",
+                y="median_earnings",
+                color=cred_label_col,
+                symbol="school_name",
+                hover_name="cip_title",
+                hover_data={
+                    "school_name": True,
+                    cred_label_col: True,
+                    "median_earnings": ":$,.0f",
+                    "median_debt": ":$,.0f",
+                    "prog_debt_ratio": ":.2f",
+                },
+                labels={
+                    "median_debt": "Median Debt ($)" if lang == "en" else "學貸中位數 ($)",
+                    "median_earnings": "Median Earnings ($)" if lang == "en" else "薪資中位數 ($)",
+                    cred_label_col: "Credential" if lang == "en" else "學位",
+                    "school_name": "School" if lang == "en" else "學校",
+                },
+                height=460,
+            )
+            fig_scatter.update_traces(marker=dict(size=11, opacity=0.8))
+            fig_scatter.update_xaxes(tickprefix="$", tickformat=",")
+            fig_scatter.update_yaxes(tickprefix="$", tickformat=",")
+            fig_scatter.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Nunito", size=12),
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.caption(
+                "Each point = one program at one school. "
+                "Top-left = high earnings + low debt = best value."
+                if lang == "en"
+                else "每個點 = 一所學校的一個科系。左上角 = 高薪低貸 = 最佳 CP 值。"
+            )
+
+            # Program ranking table
+            st.markdown("#### " + ("Program Rankings" if lang == "en" else "科系 CP 值排名"))
+            rank_df = combined[[
+                "school_name", "cip_title", cred_label_col,
+                "median_earnings", "median_debt", "prog_debt_ratio",
+            ]].sort_values("median_earnings", ascending=False).reset_index(drop=True)
+            rank_df.index = rank_df.index + 1
+            rank_df.columns = [
+                "School" if lang == "en" else "學校",
+                "Field" if lang == "en" else "科系",
+                "Credential" if lang == "en" else "學位",
+                "Earnings" if lang == "en" else "薪資",
+                "Debt" if lang == "en" else "學貸",
+                "Debt/Earn" if lang == "en" else "學貸/薪資",
+            ]
+            rank_df["Earnings" if lang == "en" else "薪資"] = (
+                rank_df["Earnings" if lang == "en" else "薪資"].apply(fmt_usd)
+            )
+            rank_df["Debt" if lang == "en" else "學貸"] = (
+                rank_df["Debt" if lang == "en" else "學貸"].apply(
+                    lambda x: fmt_usd(x) if pd.notna(x) else "N/A"
+                )
+            )
+            rank_df["Debt/Earn" if lang == "en" else "學貸/薪資"] = (
+                rank_df["Debt/Earn" if lang == "en" else "學貸/薪資"].apply(
+                    lambda x: f"{x:.2f}" if pd.notna(x) and x is not None else "N/A"
+                )
+            )
+            st.dataframe(rank_df, use_container_width=True, height=320)
+else:
+    st.info(
+        "Click **Load Program Data** above after adding schools to see field-of-study comparisons."
+        if lang == "en"
+        else "新增學校後點擊「**載入科系資料**」以查看科系層級比較。"
     )

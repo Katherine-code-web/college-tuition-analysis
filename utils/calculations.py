@@ -197,6 +197,144 @@ def cp_animal_badge_html(score: float | None, lang: str = "en") -> str:
     )
 
 
+# ── Field-of-Study / Program data helpers ────────────────────────────────────
+
+CRED_LEVEL_MAP = {
+    1: "Certificate",
+    2: "Associate's",
+    3: "Bachelor's",
+    5: "Grad Certificate",
+    6: "Master's",
+    7: "Doctoral",
+    8: "Professional",
+}
+
+CRED_LEVEL_MAP_ZH = {
+    1: "學士前證書",
+    2: "準學士",
+    3: "學士",
+    5: "研究所證書",
+    6: "碩士",
+    7: "博士",
+    8: "專業學位",
+}
+
+# Display order for credential levels (lowest → highest)
+CRED_LEVEL_ORDER = {1: 0, 2: 1, 3: 2, 5: 3, 6: 4, 7: 5, 8: 6}
+
+# CIP 2-digit category labels
+CIP_CATEGORIES = {
+    "01": "Agriculture",
+    "03": "Natural Resources",
+    "04": "Architecture",
+    "05": "Area & Ethnic Studies",
+    "09": "Communication",
+    "10": "Communications Technology",
+    "11": "Computer & Info Sciences",
+    "12": "Culinary & Personal Services",
+    "13": "Education",
+    "14": "Engineering",
+    "15": "Engineering Technology",
+    "16": "Foreign Languages",
+    "19": "Family & Consumer Sciences",
+    "22": "Legal Professions",
+    "23": "English",
+    "24": "Liberal Arts",
+    "26": "Biological Sciences",
+    "27": "Mathematics & Statistics",
+    "30": "Multi/Interdisciplinary Studies",
+    "31": "Parks & Recreation",
+    "38": "Philosophy & Religion",
+    "40": "Physical Sciences",
+    "42": "Psychology",
+    "43": "Security & Protective Services",
+    "44": "Public Administration",
+    "45": "Social Sciences",
+    "50": "Visual & Performing Arts",
+    "51": "Health Professions",
+    "52": "Business & Management",
+    "54": "History",
+}
+
+CIP_CATEGORIES_ZH = {
+    "01": "農業",
+    "03": "自然資源",
+    "04": "建築",
+    "05": "區域與族裔研究",
+    "09": "傳播",
+    "10": "傳播技術",
+    "11": "電腦與資訊科學",
+    "12": "餐飲與個人服務",
+    "13": "教育",
+    "14": "工程",
+    "15": "工程技術",
+    "16": "外語",
+    "19": "家庭與消費科學",
+    "22": "法律",
+    "23": "英語",
+    "24": "文科",
+    "26": "生物科學",
+    "27": "數學與統計",
+    "30": "跨領域研究",
+    "31": "休閒娛樂",
+    "38": "哲學與宗教",
+    "40": "自然科學",
+    "42": "心理學",
+    "43": "安全與保護服務",
+    "44": "公共行政",
+    "45": "社會科學",
+    "50": "視覺與表演藝術",
+    "51": "醫療與健康",
+    "52": "商業與管理",
+    "54": "歷史",
+}
+
+
+def compute_program_value_score(
+    median_earnings, net_price, completion_rate=None
+) -> float | None:
+    """Program-level value score using program earnings vs school net price."""
+    return compute_value_score(median_earnings, net_price, completion_rate)
+
+
+def programs_to_df(
+    programs: list[dict],
+    school_net_price=None,
+    school_completion_rate=None,
+) -> "pd.DataFrame":
+    """Convert raw program list to an enriched DataFrame."""
+    import pandas as pd
+
+    if not programs:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(programs)
+    # Add CIP 2-digit category
+    df["cip_2digit"] = df["cip_code"].str[:2]
+    df["cip_category"] = df["cip_2digit"].map(CIP_CATEGORIES).fillna("Other")
+    df["cip_category_zh"] = df["cip_2digit"].map(CIP_CATEGORIES_ZH).fillna("其他")
+    # Readable credential labels
+    df["cred_label"] = df["cred_level"].map(CRED_LEVEL_MAP).fillna("Unknown")
+    df["cred_label_zh"] = df["cred_level"].map(CRED_LEVEL_MAP_ZH).fillna("未知")
+    df["cred_order"] = df["cred_level"].map(CRED_LEVEL_ORDER).fillna(99)
+    # Program-level value score (uses school-level net price)
+    if school_net_price:
+        df["prog_value_score"] = df["median_earnings"].apply(
+            lambda e: compute_program_value_score(e, school_net_price, school_completion_rate)
+        )
+        df["prog_animal"] = df["prog_value_score"].apply(
+            lambda s: get_cp_animal(s)["emoji"] if s is not None else "🐾"
+        )
+    # Debt-to-earnings ratio (program-level)
+    df["prog_debt_ratio"] = df.apply(
+        lambda r: round(r["median_debt"] / r["median_earnings"], 2)
+        if r.get("median_debt") and r.get("median_earnings")
+        else None,
+        axis=1,
+    )
+    return df
+
+
 def debt_label(ratio: float | None, lang: str = "en") -> str:
     """Return a traffic-light label for debt-to-income ratio."""
     if ratio is None:

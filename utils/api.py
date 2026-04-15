@@ -230,6 +230,63 @@ def results_to_df(results: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# Fields for program-level (CIP 4-digit) data
+PROGRAM_FIELDS = "id,school.name,latest.programs.cip_4_digit"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_school_programs(school_id: int) -> list[dict]:
+    """
+    Fetch field-of-study (CIP 4-digit) programs for a school.
+
+    Returns a list of dicts with keys:
+      cip_code, cip_title, cred_level, cred_title,
+      median_earnings, median_debt
+    """
+    params = {
+        "api_key": get_api_key(),
+        "fields": PROGRAM_FIELDS,
+        "id": school_id,
+    }
+    try:
+        resp = requests.get(API_BASE, params=params, timeout=15)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if not results:
+            return []
+        raw_programs = results[0].get("latest.programs.cip_4_digit") or []
+        if not isinstance(raw_programs, list):
+            return []
+        programs = []
+        for p in raw_programs:
+            if not isinstance(p, dict):
+                continue
+            code = p.get("code")
+            if code is None:
+                continue
+            cred = p.get("credential") or {}
+            earn = p.get("earnings") or {}
+            debt = p.get("debt") or {}
+            median_earn = earn.get("median_earnings")
+            median_debt_val = debt.get("median_loan_debt")
+            # Skip suppressed / missing data rows
+            if median_earn == "PrivacySuppressed":
+                median_earn = None
+            if median_debt_val == "PrivacySuppressed":
+                median_debt_val = None
+            programs.append({
+                "cip_code": str(code).zfill(4),
+                "cip_title": p.get("title", ""),
+                "cred_level": cred.get("level"),
+                "cred_title": cred.get("title", ""),
+                "median_earnings": int(median_earn) if median_earn else None,
+                "median_debt": int(median_debt_val) if median_debt_val else None,
+            })
+        return programs
+    except requests.RequestException as e:
+        return []
+
+
 def fmt_usd(value, na="N/A") -> str:
     """Format a number as USD string."""
     if value is None or pd.isna(value):

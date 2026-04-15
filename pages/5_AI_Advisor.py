@@ -5,12 +5,13 @@ Chat with your chosen animal advisor powered by Claude + real College Scorecard 
 
 import os
 import re
+import pandas as pd
 import streamlit as st
 from utils.theme import get_theme_css
 import anthropic
 from dotenv import load_dotenv
-from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct, SCHOOL_ALIASES
-from utils.calculations import enrich_df, score_label, debt_label
+from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct, SCHOOL_ALIASES, get_school_programs
+from utils.calculations import enrich_df, score_label, debt_label, programs_to_df, CRED_LEVEL_MAP
 from utils.scholarships import EXTERNAL_SCHOLARSHIPS
 from utils.advisors import ADVISORS, DEFAULT_ADVISOR, advisor_system_personality
 
@@ -79,14 +80,18 @@ if "messages" not in st.session_state or len(st.session_state.messages) == 0:
     suggestions_en = [
         "Compare Harvard and MIT",
         "Which schools in California have the best ROI?",
+        "Is a Master's degree in Computer Science at MIT worth it?",
         "What scholarships are available for international students?",
         "I have a $40,000/year budget — what are my options?",
+        "Compare CS programs at CMU vs Georgia Tech",
     ]
     suggestions_zh = [
         "比較哈佛和MIT",
         "加州哪些學校 CP 值最高？",
+        "MIT 的資訊科學碩士值得讀嗎？",
         "哪些獎學金開放國際學生申請？",
         "我的年預算是 $40,000，有哪些學校可以選？",
+        "比較 CMU 和 Georgia Tech 的 CS 科系",
     ]
     suggestions = suggestions_en if lang == "en" else suggestions_zh
     cols = st.columns(2)
@@ -159,7 +164,7 @@ def extract_school_names(text: str) -> list[str]:
 
 # ── Step 2: Fetch data for each extracted school ───────────────────────────────
 def fetch_school_data(query: str, per_page: int = 2) -> str:
-    """Search for a school and return formatted data string."""
+    """Search for a school and return formatted data string including top programs."""
     results, _ = search_schools(name=query, per_page=per_page)
     if not results:
         return ""
@@ -175,7 +180,7 @@ def fetch_school_data(query: str, per_page: int = 2) -> str:
         dti_str = debt_label(dti, "en") if dti else "N/A"
         py_str = f"{py:.1f} years" if py else "N/A"
         enroll_str = f"{int(enrollment):,}" if enrollment else "N/A"
-        lines.append(
+        school_block = (
             f"School: {row.get('name', 'Unknown')} ({row.get('state', '')}) — {row.get('type_en', '')}\n"
             f"  Enrollment: {enroll_str}\n"
             f"  Admission rate: {fmt_pct(row.get('admission_rate'))}\n"
@@ -189,6 +194,36 @@ def fetch_school_data(query: str, per_page: int = 2) -> str:
             f"  Payback years: {py_str}\n"
             f"  Pell Grant recipients: {fmt_pct(row.get('pell_rate'))} | Federal loan recipients: {fmt_pct(row.get('loan_rate'))}\n"
         )
+        # Append top programs by credential level if available
+        school_id = row.get("id")
+        if school_id:
+            try:
+                raw_programs = get_school_programs(int(school_id))
+                if raw_programs:
+                    prog_df = programs_to_df(
+                        raw_programs,
+                        school_net_price=row.get("net_price"),
+                        school_completion_rate=row.get("completion_rate"),
+                    )
+                    prog_df = prog_df.dropna(subset=["median_earnings"])
+                    if not prog_df.empty:
+                        prog_lines = ["  Top programs by credential level (1yr post-graduation earnings):"]
+                        for cred_level in [3, 6, 7]:  # Bachelor's, Master's, Doctoral
+                            cred_sub = prog_df[prog_df["cred_level"] == cred_level]
+                            if not cred_sub.empty:
+                                cred_name = CRED_LEVEL_MAP.get(cred_level, "Unknown")
+                                top3 = cred_sub.nlargest(3, "median_earnings")
+                                prog_lines.append(f"    {cred_name}:")
+                                for _, pr in top3.iterrows():
+                                    earn_str = fmt_usd(pr["median_earnings"])
+                                    debt_str = fmt_usd(pr["median_debt"]) if pd.notna(pr.get("median_debt")) else "N/A"
+                                    prog_lines.append(
+                                        f"      - {pr['cip_title']}: earnings {earn_str}, debt {debt_str}"
+                                    )
+                        school_block += "\n".join(prog_lines) + "\n"
+            except Exception:
+                pass
+        lines.append(school_block)
     return "\n".join(lines)
 
 
@@ -254,6 +289,10 @@ KEY METRICS EXPLAINED:
   Score < 2: Low | 2–4: Fair | 4–6: Good | 6+: Excellent
 - Debt-to-Income = median debt ÷ 10yr earnings. Below 1.0 manageable, above 1.5 risky.
 - Payback Years = (net price × 4) ÷ 10yr earnings.
+- Program-level earnings = 1-year post-completion median earnings by CIP field & credential level.
+  Available for Bachelor's (level 3), Master's (level 6), and Doctoral (level 7) programs.
+- Graduate Premium = (Master's earnings - Bachelor's earnings) per year.
+  Payback = (extra tuition + opportunity cost) ÷ annual earnings premium.
 
 --- REAL-TIME SCHOOL DATA ---
 {school_data_context if school_data_context else "No specific school data was found for this query. Answer based on general knowledge and note the limitation."}

@@ -8,8 +8,11 @@ from utils.theme import get_theme_css
 import pandas as pd
 import plotly.express as px
 from utils.translations import t, US_STATES
-from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct
-from utils.calculations import enrich_df, score_label, debt_label, cp_animal_badge_html, get_cp_animal
+from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct, get_school_programs
+from utils.calculations import (
+    enrich_df, score_label, debt_label, cp_animal_badge_html, get_cp_animal,
+    programs_to_df, CRED_LEVEL_MAP, CRED_LEVEL_MAP_ZH,
+)
 from utils.scholarships import EXTERNAL_SCHOLARSHIPS
 
 st.set_page_config(page_title="School Profile", page_icon="🔍", layout="wide")
@@ -243,7 +246,168 @@ if any([net_price, earnings_6, earnings_10]):
         else "CP 值分數 = 10 年後薪資 ÷ 實際學費 × 畢業率。分數越高越好。"
     )
 
-# ── Section 3: Scholarship Recommendations ───────────────────────────────────
+# ── Section 3: Programs & Fields of Study ────────────────────────────────────
+st.markdown("---")
+st.subheader("🎓 " + t("programs_title", lang))
+st.caption(t("programs_desc", lang))
+
+school_id = row.get("id")
+if school_id:
+    with st.spinner(t("programs_loading", lang)):
+        raw_programs = get_school_programs(int(school_id))
+
+    if raw_programs:
+        prog_df = programs_to_df(
+            raw_programs,
+            school_net_price=row.get("net_price"),
+            school_completion_rate=row.get("completion_rate"),
+        )
+
+        # ── Credential level filter ───────────────────────────────────────────
+        cred_label_col = "cred_label" if lang == "en" else "cred_label_zh"
+        all_creds = sorted(prog_df["cred_label"].dropna().unique().tolist())
+        cred_display = {
+            c: (CRED_LEVEL_MAP.get(k, c) if lang == "en" else CRED_LEVEL_MAP_ZH.get(k, c))
+            for k, c in zip(prog_df["cred_level"].dropna().unique(), all_creds)
+        }
+        cred_options = [t("programs_cred_all", lang)] + all_creds
+        selected_cred = st.selectbox(t("programs_filter_cred", lang), cred_options)
+
+        # ── Sort ──────────────────────────────────────────────────────────────
+        sort_options = {
+            t("programs_sort_earn", lang): "median_earnings",
+            t("programs_sort_debt", lang): "median_debt",
+            t("programs_sort_ratio", lang): "prog_debt_ratio",
+        }
+        selected_sort_label = st.radio(
+            t("programs_sort", lang),
+            list(sort_options.keys()),
+            horizontal=True,
+        )
+        sort_col = sort_options[selected_sort_label]
+
+        # ── Filter & sort ─────────────────────────────────────────────────────
+        display_prog = prog_df.copy()
+        if selected_cred != t("programs_cred_all", lang):
+            display_prog = display_prog[display_prog["cred_label"] == selected_cred]
+
+        display_prog = display_prog.dropna(subset=["median_earnings"]).sort_values(
+            sort_col, ascending=(sort_col != "median_earnings"), na_position="last"
+        )
+
+        if display_prog.empty:
+            st.info(t("programs_no_data", lang))
+        else:
+            # Format for display
+            show_cols = {
+                t("programs_cip", lang): display_prog["cip_title"],
+                t("programs_cred", lang): (
+                    display_prog["cred_label"] if lang == "en" else display_prog["cred_label_zh"]
+                ),
+                t("programs_earn", lang): display_prog["median_earnings"].apply(
+                    lambda x: fmt_usd(x) if pd.notna(x) else "N/A"
+                ),
+                t("programs_debt", lang): display_prog["median_debt"].apply(
+                    lambda x: fmt_usd(x) if pd.notna(x) else "N/A"
+                ),
+                t("programs_ratio", lang): display_prog["prog_debt_ratio"].apply(
+                    lambda x: f"{x:.2f}" if pd.notna(x) and x is not None else "N/A"
+                ),
+            }
+            if "prog_value_score" in display_prog.columns:
+                show_cols["CP"] = display_prog["prog_value_score"].apply(
+                    lambda x: f"{x:.2f}" if pd.notna(x) and x is not None else "N/A"
+                )
+                show_cols["🐾"] = display_prog.get("prog_animal", pd.Series(["🐾"] * len(display_prog)))
+
+            table_df = pd.DataFrame(show_cols)
+            st.dataframe(table_df, use_container_width=True, hide_index=True, height=320)
+            st.caption(
+                f"Showing {len(display_prog)} programs. "
+                "Data: College Scorecard Field of Study (U.S. Dept. of Education)"
+                if lang == "en"
+                else f"顯示 {len(display_prog)} 個科系。資料來源：College Scorecard 科系層級資料（美國教育部）"
+            )
+
+            # ── Bachelor's vs Graduate earnings chart ─────────────────────────
+            st.markdown("#### " + t("programs_vs_title", lang))
+            st.caption(t("programs_vs_desc", lang))
+
+            # Find fields that have both undergrad (cred_level=3) and grad (6 or 7)
+            ug_progs = prog_df[prog_df["cred_level"] == 3][["cip_title", "median_earnings"]].rename(
+                columns={"median_earnings": "bachelor_earn"}
+            )
+            ms_progs = prog_df[prog_df["cred_level"] == 6][["cip_title", "median_earnings"]].rename(
+                columns={"median_earnings": "master_earn"}
+            )
+            phd_progs = prog_df[prog_df["cred_level"] == 7][["cip_title", "median_earnings"]].rename(
+                columns={"median_earnings": "doctoral_earn"}
+            )
+
+            merged = ug_progs.merge(ms_progs, on="cip_title", how="outer")
+            merged = merged.merge(phd_progs, on="cip_title", how="outer")
+            # Keep only rows with at least 2 credential levels with data
+            merged = merged.dropna(subset=["cip_title"])
+            merged["data_count"] = merged[["bachelor_earn","master_earn","doctoral_earn"]].notna().sum(axis=1)
+            merged = merged[merged["data_count"] >= 2].sort_values("bachelor_earn", ascending=False).head(15)
+
+            if not merged.empty:
+                chart_data = []
+                for _, mrow in merged.iterrows():
+                    if pd.notna(mrow.get("bachelor_earn")):
+                        chart_data.append({
+                            "Field": mrow["cip_title"][:35] + ("..." if len(mrow["cip_title"]) > 35 else ""),
+                            "Earnings": mrow["bachelor_earn"],
+                            "Level": "Bachelor's" if lang == "en" else "學士",
+                        })
+                    if pd.notna(mrow.get("master_earn")):
+                        chart_data.append({
+                            "Field": mrow["cip_title"][:35] + ("..." if len(mrow["cip_title"]) > 35 else ""),
+                            "Earnings": mrow["master_earn"],
+                            "Level": "Master's" if lang == "en" else "碩士",
+                        })
+                    if pd.notna(mrow.get("doctoral_earn")):
+                        chart_data.append({
+                            "Field": mrow["cip_title"][:35] + ("..." if len(mrow["cip_title"]) > 35 else ""),
+                            "Earnings": mrow["doctoral_earn"],
+                            "Level": "Doctoral" if lang == "en" else "博士",
+                        })
+
+                level_colors = {
+                    "Bachelor's": "#4D96FF", "Master's": "#6BCB77", "Doctoral": "#9B5DE5",
+                    "學士": "#4D96FF", "碩士": "#6BCB77", "博士": "#9B5DE5",
+                }
+                chart_df_prog = pd.DataFrame(chart_data)
+                fig_prog = px.bar(
+                    chart_df_prog,
+                    x="Earnings", y="Field", color="Level",
+                    barmode="group", orientation="h",
+                    color_discrete_map=level_colors,
+                    labels={
+                        "Earnings": "Median Earnings (USD)" if lang == "en" else "薪資中位數（美元）",
+                        "Field": "",
+                        "Level": "Credential" if lang == "en" else "學位",
+                    },
+                    height=max(300, len(merged) * 45),
+                )
+                fig_prog.update_xaxes(tickprefix="$", tickformat=",")
+                fig_prog.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Nunito", size=12),
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.25),
+                    margin=dict(t=10, l=10),
+                )
+                st.plotly_chart(fig_prog, use_container_width=True)
+            else:
+                st.info(
+                    "Not enough multi-level data to show a comparison chart for this school."
+                    if lang == "en"
+                    else "此校資料不足，無法顯示學位層級薪資比較圖。"
+                )
+    else:
+        st.info(t("programs_no_data", lang))
+
+# ── Section 4: Scholarship Recommendations ───────────────────────────────────
 st.markdown("---")
 st.subheader("🎓 " + ("Recommended Aid & Scholarships" if lang == "en" else "推薦助學方案"))
 
@@ -321,7 +485,7 @@ st.page_link(
     label="→ " + ("View all scholarships & loan guide" if lang == "en" else "查看全部獎學金與貸款說明"),
 )
 
-# ── Section 4: Quick Loan Estimate ───────────────────────────────────────────
+# ── Section 5: Quick Loan Estimate ───────────────────────────────────────────
 st.markdown("---")
 st.subheader("🧮 " + ("Quick Loan Repayment Estimate" if lang == "en" else "快速貸款還款試算"))
 
