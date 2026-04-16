@@ -1,14 +1,15 @@
 """
 Page 5 — AI College Advisor
-Chat with your chosen animal advisor powered by Claude + real College Scorecard data.
+Chat with your chosen animal advisor powered by Gemini + real College Scorecard data.
 """
 
 import os
 import re
+import json
 import pandas as pd
 import streamlit as st
 from utils.theme import get_theme_css
-import anthropic
+import google.generativeai as genai
 from dotenv import load_dotenv
 from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct, SCHOOL_ALIASES, get_school_programs
 from utils.calculations import enrich_df, score_label, debt_label, programs_to_df, CRED_LEVEL_MAP
@@ -20,17 +21,20 @@ load_dotenv()
 st.set_page_config(page_title="AI College Advisor", page_icon="🤖", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
 
-
 lang = st.session_state.get("lang", "en")
 advisor_key = st.session_state.get("advisor", DEFAULT_ADVISOR)
 adv = ADVISORS[advisor_key]
 
-api_key = os.getenv("ANTHROPIC_API_KEY", "")
-if not api_key:
-    st.error("ANTHROPIC_API_KEY not found in .env file.")
+gemini_key = os.getenv("GEMINI_API_KEY", "")
+if not gemini_key:
+    st.error(
+        "GEMINI_API_KEY not found. Add it to Streamlit Cloud Secrets."
+        if lang == "en"
+        else "找不到 GEMINI_API_KEY，請至 Streamlit Cloud Secrets 設定。"
+    )
     st.stop()
 
-client = anthropic.Anthropic(api_key=api_key)
+genai.configure(api_key=gemini_key)
 
 # ── Theme CSS ─────────────────────────────────────────────────────────────────
 st.markdown(f"""
@@ -129,7 +133,7 @@ with st.chat_message("user", avatar="👤"):
 # ── Step 1: Use Claude to extract school names from the query ──────────────────
 def extract_school_names(text: str) -> list[str]:
     """
-    Use a fast Claude call to extract all school names mentioned in the query.
+    Use Gemini Flash to extract all school names mentioned in the query.
     Returns a list of English school name strings to search.
     """
     extraction_prompt = (
@@ -146,14 +150,9 @@ def extract_school_names(text: str) -> list[str]:
         f"\nText: {text}\n\nReturn only the JSON array, nothing else."
     )
     try:
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            messages=[{"role": "user", "content": extraction_prompt}],
-        )
-        import json
-        raw = resp.content[0].text.strip()
-        # Strip markdown code fences if present
+        flash_model = genai.GenerativeModel("gemini-2.0-flash")
+        resp = flash_model.generate_content(extraction_prompt)
+        raw = resp.text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw).strip()
         names = json.loads(raw)
@@ -301,22 +300,37 @@ KEY METRICS EXPLAINED:
 {scholarship_context}
 """
 
-# ── Stream Claude response ─────────────────────────────────────────────────────
-api_messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[-12:]]
+# ── Stream Gemini response ────────────────────────────────────────────────────
+# Convert message history to Gemini format (role: "user"/"model", parts: [text])
+gemini_history = []
+for m in st.session_state.messages[-12:][:-1]:  # all except the last user message
+    gemini_role = "model" if m["role"] == "assistant" else "user"
+    gemini_history.append({"role": gemini_role, "parts": [m["content"]]})
+
+advisor_model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash",
+    system_instruction=system_prompt,
+    generation_config=genai.GenerationConfig(max_output_tokens=1200),
+)
+
+chat_session = advisor_model.start_chat(history=gemini_history)
 
 with st.chat_message("assistant", avatar=adv["emoji"]):
     response_placeholder = st.empty()
     full_response = ""
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=1200,
-        system=system_prompt,
-        messages=api_messages,
-    ) as stream:
-        for text in stream.text_stream:
-            full_response += text
-            response_placeholder.markdown(full_response + "▌")
+    try:
+        stream = chat_session.send_message(user_input, stream=True)
+        for chunk in stream:
+            if chunk.text:
+                full_response += chunk.text
+                response_placeholder.markdown(full_response + "▌")
+    except Exception as e:
+        full_response = (
+            "Sorry, I encountered an error. Please try again."
+            if lang == "en"
+            else "抱歉，發生錯誤，請再試一次。"
+        )
 
     response_placeholder.markdown(full_response)
 
