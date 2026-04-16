@@ -4,9 +4,47 @@ Matching utilities for Smart School Matcher.
 Admission probability estimates are rough approximations based on publicly
 available score distributions only. They do NOT account for essays,
 recommendations, demographics, yield management, or holistic review.
+For graduate programs the base rate is further adjusted heuristically
+because College Scorecard only provides institution-wide (undergrad) admit rates.
 """
 
 import pandas as pd
+
+_GRAD_DEGREES = {"Master's", "MBA", "Doctoral"}
+
+
+# ── Grad admit rate adjustment ────────────────────────────────────────────────
+
+def _estimate_grad_admit_rate(undergrad_rate: float, degree: str) -> float:
+    """
+    Heuristically adjust an undergrad admission rate to a graduate-level estimate.
+
+    Graduate applicant pools are smaller and more self-selected, so most
+    Master's / MBA programs admit a higher fraction of applicants than the
+    corresponding undergrad program.  Doctoral programs are often more
+    selective than undergrad.
+
+    These are rough approximations — real program admit rates vary widely.
+    """
+    if degree == "Doctoral":
+        # PhD programs tend to be more selective; keep close to undergrad rate
+        # (some are higher, some lower — undergrad rate is weak signal either way)
+        return min(undergrad_rate * 1.0, 0.40)
+
+    # Master's / MBA
+    if undergrad_rate < 0.10:
+        # Very selective schools (e.g. MIT, Harvard): their MBA is also highly
+        # selective, but admit rate is still higher than undergrad
+        return min(undergrad_rate * 2.5, 0.45)
+    elif undergrad_rate < 0.25:
+        # Selective schools: MBA typically 30–50%
+        return min(undergrad_rate * 2.2, 0.65)
+    elif undergrad_rate < 0.50:
+        # Moderately selective: grad programs usually more open
+        return min(undergrad_rate * 1.8, 0.80)
+    else:
+        # Open-access / less selective: grad programs nearly as open
+        return min(undergrad_rate * 1.3, 0.90)
 
 
 # ── Admission Probability ──────────────────────────────────────────────────────
@@ -17,45 +55,57 @@ def estimate_admission_probability(
     """
     Estimate admission probability for a user at a given school.
     Returns (probability_0_to_1, has_score_data).
+
+    For graduate programs (Master's / MBA / Doctoral) the institution-wide
+    undergrad admit rate is adjusted via _estimate_grad_admit_rate before
+    applying academic score factors.
     """
     base_rate = school.get("admission_rate")
     if base_rate is None or base_rate <= 0:
         return None, False
 
+    # Adjust for graduate-level programs
+    degree = user_profile.get("target_degree", "Bachelor's")
+    if degree in _GRAD_DEGREES:
+        base_rate = _estimate_grad_admit_rate(base_rate, degree)
+
     score_factor = 1.0
     has_score_data = False
 
-    user_sat = user_profile.get("sat")
-    sat_p25 = school.get("sat_p25")
-    sat_p75 = school.get("sat_p75")
+    # SAT/ACT comparisons are only meaningful for undergrad applicants
+    if degree not in _GRAD_DEGREES:
+        user_sat = user_profile.get("sat")
+        sat_p25 = school.get("sat_p25")
+        sat_p75 = school.get("sat_p75")
 
-    if user_sat and sat_p25 and sat_p75:
-        has_score_data = True
-        mid = (sat_p25 + sat_p75) / 2
-        if user_sat >= sat_p75:
-            score_factor = 1.8
-        elif user_sat >= mid:
-            score_factor = 1.3
-        elif user_sat >= sat_p25:
-            score_factor = 1.0
-        else:
-            score_factor = 0.5
-    else:
-        user_act = user_profile.get("act")
-        act_p25 = school.get("act_p25")
-        act_p75 = school.get("act_p75")
-        if user_act and act_p25 and act_p75:
+        if user_sat and sat_p25 and sat_p75:
             has_score_data = True
-            mid = (act_p25 + act_p75) / 2
-            if user_act >= act_p75:
+            mid = (sat_p25 + sat_p75) / 2
+            if user_sat >= sat_p75:
                 score_factor = 1.8
-            elif user_act >= mid:
+            elif user_sat >= mid:
                 score_factor = 1.3
-            elif user_act >= act_p25:
+            elif user_sat >= sat_p25:
                 score_factor = 1.0
             else:
                 score_factor = 0.5
+        else:
+            user_act = user_profile.get("act")
+            act_p25 = school.get("act_p25")
+            act_p75 = school.get("act_p75")
+            if user_act and act_p25 and act_p75:
+                has_score_data = True
+                mid = (act_p25 + act_p75) / 2
+                if user_act >= act_p75:
+                    score_factor = 1.8
+                elif user_act >= mid:
+                    score_factor = 1.3
+                elif user_act >= act_p25:
+                    score_factor = 1.0
+                else:
+                    score_factor = 0.5
 
+    # GPA factor applies to both undergrad and grad applicants
     user_gpa = user_profile.get("gpa")
     if user_gpa:
         if user_gpa >= 3.9:
@@ -118,9 +168,18 @@ def score_schools_df(user_profile: dict, df: pd.DataFrame) -> pd.DataFrame:
     and the worst approaches 0.
 
     Expects optional columns already on df:
-      - field_earnings: field-specific median earnings (overrides earnings_10yr
-        for the employment dimension when present)
-      - has_target_field: True/False/None — adds a penalty for False schools
+      - field_earnings:    field-specific median earnings (overrides earnings_10yr
+                           for the employment dimension when present)
+      - has_target_field:  True / None / False — False adds a penalty
+      - reputation_bonus:  0.0–1.0 program reputation score from
+                           utils.program_reputation (grad mode only)
+
+    Grad mode (target_degree in Master's / MBA / Doctoral):
+      The "CP Value" dimension is replaced by program reputation
+      (reputation_bonus percentile rank) when that column is present and
+      at least one school has a non-None score.  This corrects for the
+      fact that value_score uses institution-wide undergrad earnings,
+      which are misleading for graduate program comparisons.
     """
     if df.empty:
         return df
@@ -132,8 +191,22 @@ def score_schools_df(user_profile: dict, df: pd.DataFrame) -> pd.DataFrame:
     }
     total_w = sum(weights.values()) or 1
 
-    # ── Dimension 1: CP Value (higher value_score = better) ──────────────────
-    df["_cp"] = df["value_score"].fillna(0).rank(pct=True, method="average")
+    target_degree = user_profile.get("target_degree", "Bachelor's")
+    _is_grad = target_degree in _GRAD_DEGREES
+
+    # ── Dimension 1: CP Value (undergrad) OR Program Reputation (grad) ────────
+    use_reputation = (
+        _is_grad
+        and "reputation_bonus" in df.columns
+        and df["reputation_bonus"].notna().any()
+    )
+    if use_reputation:
+        # Fill None (unknown schools) with 0.5 so they land in the middle,
+        # not at the bottom.  Schools in the lookup table compete on tier;
+        # unknown schools are treated neutrally.
+        df["_cp"] = df["reputation_bonus"].fillna(0.5).rank(pct=True, method="average")
+    else:
+        df["_cp"] = df["value_score"].fillna(0).rank(pct=True, method="average")
 
     # ── Dimension 2: Prestige (lower admission rate = higher prestige) ────────
     df["_prestige"] = (1.0 - df["admission_rate"].fillna(0.5)).rank(

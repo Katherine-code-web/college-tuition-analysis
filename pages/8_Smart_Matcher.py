@@ -14,6 +14,7 @@ from utils.api import (
 from utils.calculations import enrich_df, CIP_CATEGORIES
 from utils.matching import score_schools_df, classify_school
 from utils.field_suggestions import get_field_hint
+from utils.program_reputation import get_reputation_score
 
 st.set_page_config(page_title="Smart Matcher", page_icon="🎯", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
@@ -220,8 +221,13 @@ if df.empty:
 # ── Fetch field-specific earnings BEFORE scoring ──────────────────────────────
 # This lets score_schools_df use field_earnings in the employment dimension
 # so the percentile ranking reflects your actual target field.
+# Also tracks field_size (number of CIP sub-programs) as a program scale proxy.
 field_earn_map: dict[int, float] = {}
-field_present_map: dict[int, bool] = {}
+field_present_map: dict[int, bool | None] = {}
+field_size_map: dict[int, int] = {}
+
+target_degree_val = effective_profile.get("target_degree", "Bachelor's")
+
 if cip_prefix:
     with st.spinner(
         f"🎓 Checking {field_override} program data..."
@@ -237,6 +243,8 @@ if cip_prefix:
                     p for p in programs
                     if str(p.get("cip_code", ""))[:2] == cip_prefix
                 ]
+                # Track program breadth (number of sub-programs) as proxy for dept size
+                field_size_map[school_id] = len(cip_programs)
                 # Subset that also have earnings data
                 with_earnings = [p for p in cip_programs if p.get("median_earnings")]
                 if with_earnings:
@@ -259,6 +267,21 @@ if cip_prefix:
     df["has_target_field"] = df["id"].apply(
         lambda x: field_present_map.get(int(x)) if pd.notna(x) else None
     )
+    df["field_size"] = df["id"].apply(
+        lambda x: field_size_map.get(int(x), 0) if pd.notna(x) else 0
+    )
+
+# ── Reputation bonus (grad mode) ──────────────────────────────────────────────
+# For graduate programs, add program reputation scores from the lookup table.
+# score_schools_df uses this column to replace the cp_value dimension
+# (which is based on institution-wide undergrad earnings — misleading for grad).
+_GRAD_DEGREES = {"Master's", "MBA", "Doctoral"}
+if cip_prefix and target_degree_val in _GRAD_DEGREES:
+    all_ids = df["id"].dropna().astype(int).tolist()
+    df["reputation_bonus"] = df["id"].apply(
+        lambda x: get_reputation_score(cip_prefix, target_degree_val, int(x))
+        if pd.notna(x) else None
+    )
 
 df = score_schools_df(effective_profile, df)
 df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
@@ -271,21 +294,57 @@ unknown_df = df[df["admit_category"] == "Unknown"].head(3)
 
 field_label = field_override if lang == "en" else field_override
 if "has_target_field" in df.columns:
-    # Count True (has field + earnings) and None (has field, earnings suppressed)
-    n_with_field = int((df["has_target_field"] == True).sum() + df["has_target_field"].isna().sum())  # noqa: E712
+    n_with_field = int(
+        (df["has_target_field"] == True).sum()  # noqa: E712
+        + df["has_target_field"].isna().sum()
+    )
     n_with_earnings = int((df["has_target_field"] == True).sum())  # noqa: E712
+    n_suppressed = int(df["has_target_field"].isna().sum())
 else:
-    n_with_field = len(df)
-    n_with_earnings = len(df)
+    n_with_field = n_with_earnings = len(df)
+    n_suppressed = 0
 
-if n_with_earnings < n_with_field:
-    # Some schools have the program but earnings are suppressed (e.g. top MBA programs)
+_is_grad_search = target_degree_val in _GRAD_DEGREES
+
+# ── Summary line ──────────────────────────────────────────────────────────────
+if n_suppressed > 0 and n_with_earnings == 0:
+    # All earnings suppressed — prominent warning for grad users
     st.markdown(
         f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs "
-        f"({n_with_earnings} have earnings data, {n_with_field - n_with_earnings} have suppressed data)."
+        f"(earnings data suppressed for all {n_suppressed})."
         if lang == "en"
         else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系"
-             f"（{n_with_earnings} 所有薪資資料，{n_with_field - n_with_earnings} 所資料被隱藏）。"
+             f"（全部 {n_suppressed} 所的薪資資料均被隱藏）。"
+    )
+    if _is_grad_search:
+        st.warning(
+            f"⚠️ **Data limitation:** All {n_with_field} schools offering "
+            f"**{field_label}** at {target_degree_val} level have their program earnings "
+            "suppressed by the U.S. Dept. of Education (privacy protection for small cohorts).\n\n"
+            "**What this means:**\n"
+            "- Earnings shown below are **institution-wide averages**, not specific to your field\n"
+            "- Schools strong in engineering/CS may appear inflated\n"
+            "- **Match scores in grad mode use program reputation as the primary quality signal** "
+            "(based on commonly cited rankings)\n\n"
+            "**Recommended next step:** Verify each school's program reputation using "
+            "U.S. News, Bloomberg Businessweek, or Poets & Quants."
+            if lang == "en"
+            else
+            f"⚠️ **資料限制：** 所有 {n_with_field} 所提供「{field_label}」{target_degree_val} "
+            "課程的學校，其科系薪資資料均被美國教育部以隱私保護為由而隱藏。\n\n"
+            "**這代表：**\n"
+            "- 下方顯示的薪資為**學校整體平均**，非你科系的特定數據\n"
+            "- 工程/CS 強校的整體薪資會被高估\n"
+            "- **研究所模式下，配對分數以課程聲望作為主要品質指標**（依常見排名）\n\n"
+            "**建議下一步：** 用 U.S. News、彭博商業周刊或 Poets & Quants 驗證各校課程聲望。"
+        )
+elif n_suppressed > 0:
+    st.markdown(
+        f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs "
+        f"({n_with_earnings} have earnings data · {n_suppressed} suppressed)."
+        if lang == "en"
+        else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系"
+             f"（{n_with_earnings} 所有薪資資料 · {n_suppressed} 所被隱藏）。"
     )
 else:
     st.markdown(
@@ -294,17 +353,17 @@ else:
         else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系。"
     )
 
-# Show credential hint only when NO school at all offers the field
-if cip_prefix and "has_target_field" in df.columns and n_with_field == 0:
+# Credential hint — only when no school offers the field at all (not just suppressed)
+if cip_prefix and "has_target_field" in df.columns and n_with_field == 0 and n_suppressed == 0:
     hint = get_field_hint(cip_prefix, lang)
     if hint:
         st.warning(hint)
     else:
         st.warning(
-            f"⚠️ No schools in results have confirmed **{field_label}** program data. "
+            f"⚠️ No schools in results offer **{field_label}** programs. "
             "Schools below are ranked by overall fit instead."
             if lang == "en"
-            else f"⚠️ 結果中沒有學校有確認的「{field_label}」科系資料，以整體條件排名取代。"
+            else f"⚠️ 結果中沒有學校提供「{field_label}」科系，以整體條件排名取代。"
         )
 
 # ── School Card Helper ─────────────────────────────────────────────────────────
@@ -316,11 +375,13 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
     school_type = row.get("type_en", "")
     match_score = row.get("match_score", 0)
     admit_prob = row.get("admit_prob")
-    prob_str = (
-        f"{admit_prob * 100:.0f}% admit chance"
-        if admit_prob is not None
-        else "N/A"
-    )
+    _is_grad_card = target_degree_val in _GRAD_DEGREES
+    if admit_prob is not None:
+        prob_str = f"{admit_prob * 100:.0f}% admit chance"
+        if _is_grad_card:
+            prob_str += " <span style='font-size:0.7rem;color:#aaa;'>est.</span>"
+    else:
+        prob_str = "N/A"
 
     is_intl = effective_profile.get("nationality", "United States") != "United States"
     cost = (row.get("tuition_out") if is_intl else None) or row.get("net_price")
@@ -335,10 +396,14 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
     has_field = row.get("has_target_field")
     if field_earn:
         earn_str = fmt_usd(field_earn)
-        earn_note = " <span style='color:#2E7D32;font-size:0.75rem;'>(your field)</span>"
+        earn_note = " <span style='color:#2E7D32;font-size:0.75rem;'>(field)</span>"
     else:
         earn_str = fmt_usd(row.get("earnings_10yr"))
-        earn_note = ""
+        earn_note = (
+            " <span style='color:#999;font-size:0.75rem;'>(school-wide)</span>"
+            if _is_grad_card and earn_str != "N/A"
+            else ""
+        )
     grad_str = fmt_pct(row.get("completion_rate"))
     budget_text = row.get("budget_fit_text", "")
     budget_color = row.get("budget_fit_color", "#555")
@@ -537,18 +602,33 @@ with st.expander(
     else f"📋 完整排名清單 — 全部 {len(df)} 所評分學校"
 ):
     is_intl = effective_profile.get("nationality", "United States") != "United States"
-    display_df = df[[
-        "name", "state", "type_en", "admit_category",
-        "match_score", "admit_prob",
-        "tuition_out" if is_intl else "net_price",
-        "earnings_10yr", "completion_rate", "value_score",
-    ]].copy()
+    cost_col = "tuition_out" if is_intl else "net_price"
 
-    display_df.columns = [
+    base_cols = [
+        "name", "state", "type_en", "admit_category",
+        "match_score", "admit_prob", cost_col,
+        "earnings_10yr", "completion_rate", "value_score",
+    ]
+    col_names = [
         "School", "State", "Type", "Category",
         "Match Score", "Est. Admit %",
         "Cost/yr", "10yr Earnings", "Grad Rate", "CP Score",
     ]
+
+    # Add field-specific columns when available
+    if "field_earnings" in df.columns:
+        base_cols.append("field_earnings")
+        col_names.append("Field Earnings")
+    if "reputation_bonus" in df.columns:
+        base_cols.append("reputation_bonus")
+        col_names.append("Reputation Score")
+    if "field_size" in df.columns:
+        base_cols.append("field_size")
+        col_names.append("Program Breadth")
+
+    display_df = df[base_cols].copy()
+    display_df.columns = col_names
+
     display_df["Est. Admit %"] = display_df["Est. Admit %"].apply(
         lambda x: f"{x * 100:.0f}%" if pd.notna(x) else "N/A"
     )
@@ -558,6 +638,20 @@ with st.expander(
     display_df["10yr Earnings"] = display_df["10yr Earnings"].apply(
         lambda x: fmt_usd(x) if pd.notna(x) else "N/A"
     )
+    if "Field Earnings" in display_df.columns:
+        display_df["Field Earnings"] = display_df["Field Earnings"].apply(
+            lambda x: fmt_usd(x) if pd.notna(x) else "—"
+        )
+        # Add earnings source column right after 10yr Earnings
+        display_df.insert(
+            display_df.columns.get_loc("Field Earnings"),
+            "Earnings Source",
+            display_df["Field Earnings"].apply(lambda x: "Field-specific" if x != "—" else "School-wide"),
+        )
+    if "Reputation Score" in display_df.columns:
+        display_df["Reputation Score"] = display_df["Reputation Score"].apply(
+            lambda x: f"{x:.2f}" if pd.notna(x) else "—"
+        )
     display_df["Grad Rate"] = display_df["Grad Rate"].apply(
         lambda x: f"{x*100:.0f}%" if pd.notna(x) else "N/A"
     )
@@ -566,6 +660,13 @@ with st.expander(
     )
     display_df.index = range(1, len(display_df) + 1)
     st.dataframe(display_df, use_container_width=True)
+    if target_degree_val in _GRAD_DEGREES:
+        st.caption(
+            "ℹ️ 10yr Earnings and Grad Rate are institution-wide (undergrad) figures. "
+            "Field Earnings and Reputation Score are grad-program-specific where available."
+            if lang == "en"
+            else "ℹ️ 10年薪資與畢業率為學校整體（大學部）數據。科系薪資與聲望分數為研究所課程專屬數據（有資料時顯示）。"
+        )
 
 # ── Why These Schools (transparency) ──────────────────────────────────────────
 st.markdown("---")
@@ -580,8 +681,9 @@ with st.expander(
     st.markdown(
         "#### Your Priority Weights" if lang == "en" else "#### 你的優先排序"
     )
+    _grad_label = "📈 Program Reputation" if target_degree_val in _GRAD_DEGREES else "📈 CP Value"
     weight_items = [
-        ("📈 CP Value", w.get("cp_value", 3)),
+        (_grad_label, w.get("cp_value", 3)),
         ("🏆 Prestige", w.get("prestige", 2)),
         ("💰 Low Cost", w.get("low_cost", 3)),
         ("💼 Employment", w.get("employment", 3)),
@@ -596,8 +698,44 @@ with st.expander(
         )
 
     st.markdown("---")
-    st.markdown(
-        """
+
+    if target_degree_val in _GRAD_DEGREES:
+        st.markdown(
+            f"""
+#### How Match Score is Calculated — Graduate Mode ({target_degree_val})
+Each school is **percentile-ranked** against all other results on four dimensions.
+Scores always spread 0–10 (best school ≈ 10, worst ≈ 0).
+
+| Dimension | Data Used | Note |
+|-----------|-----------|------|
+| **Program Reputation** | Lookup table of commonly ranked programs (0–1 tier) | Replaces CP Value; schools not in table are treated neutrally |
+| **Prestige** | Undergrad admission rate, adjusted for grad-level | Heuristic — actual program admit rates vary widely |
+| **Low Cost** | Annual cost (cheaper = better) | Out-of-state tuition for international students |
+| **Employment** | Field-specific earnings if available, else school-wide 10yr | ⚠️ School-wide figures are biased by undergrad majors |
+
+⚠️ **Graduate data limitations:** College Scorecard does not publish graduate-program-specific
+admission rates or completion rates. Values shown are institution-wide proxies.
+Always verify with each program's admissions office.
+            """
+            if lang == "en"
+            else
+            f"""
+#### 配對分數計算方式 — 研究所模式（{target_degree_val}）
+每所學校在四個維度以**百分位排名**互相比較，分數永遠分散在 0–10 之間。
+
+| 維度 | 使用資料 | 說明 |
+|------|---------|------|
+| **課程聲望** | 常見排名的課程聲望對照表（0–1 分）| 取代 CP 值；不在對照表中的學校視為中性 |
+| **聲望** | 大學部錄取率（已依研究所層級調整）| 啟發式估計 — 實際課程錄取率差異很大 |
+| **低費用** | 年費用（越便宜排名越高）| 國際生使用外州學費 |
+| **就業** | 有科系薪資時用科系薪資，否則用學校整體 10 年薪資 | ⚠️ 學校整體薪資受大學部科系影響，可能偏高 |
+
+⚠️ **研究所資料限制：** College Scorecard 不提供研究所課程專屬的錄取率或畢業率，顯示值均為學校整體的代理指標，請向各校招生辦公室確認實際數字。
+            """
+        )
+    else:
+        st.markdown(
+            """
 #### How Match Score is Calculated
 Each school is **percentile-ranked** against all other results on four dimensions,
 so scores always spread 0–10 (the best school in your results ≈ 10, worst ≈ 0).
@@ -610,10 +748,10 @@ so scores always spread 0–10 (the best school in your results ≈ 10, worst �
 | **Employment** | Field-specific earnings where available, else school-wide 10yr median | Higher earnings |
 
 Schools confirmed **not** to offer your target field lose a fixed penalty before final ranking.
-        """
-        if lang == "en"
-        else
-        """
+            """
+            if lang == "en"
+            else
+            """
 #### 配對分數計算方式
 每所學校在四個維度以**百分位排名**互相比較，所以分數永遠分散在 0–10 之間（你的結果中最好的學校 ≈ 10 分，最差 ≈ 0 分）。
 
@@ -625,7 +763,7 @@ Schools confirmed **not** to offer your target field lose a fixed penalty before
 | **就業** | 有科系薪資資料時用科系薪資，否則用學校整體 10 年薪資 | 薪資越高 |
 
 確認**不提供**你目標科系的學校，在最終排名前會扣除固定懲罰分。
-        """
+            """
     )
 
     st.markdown("---")
