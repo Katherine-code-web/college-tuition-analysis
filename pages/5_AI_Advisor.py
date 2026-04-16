@@ -326,11 +326,7 @@ with st.chat_message("assistant", avatar=adv["emoji"]):
                 full_response += chunk.text
                 response_placeholder.markdown(full_response + "▌")
     except Exception as e:
-        full_response = (
-            "Sorry, I encountered an error. Please try again."
-            if lang == "en"
-            else "抱歉，發生錯誤，請再試一次。"
-        )
+        full_response = f"Error: {e}"
 
     response_placeholder.markdown(full_response)
 
