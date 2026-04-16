@@ -27,7 +27,7 @@ def render_profile_status(lang: str = "en") -> None:
         if st.button(
             "📝 Set My Profile" if lang == "en" else "📝 填寫我的條件",
             key="sidebar_profile_set_btn",
-            use_container_width=True,
+            use_container_width=False,
         ):
             st.switch_page("pages/7_My_Profile.py")
     else:
@@ -50,13 +50,13 @@ def render_profile_status(lang: str = "en") -> None:
             if st.button(
                 "✏️ Edit" if lang == "en" else "✏️ 編輯",
                 key="sidebar_profile_edit_btn",
-                use_container_width=True,
+                use_container_width=False,
             ):
                 st.switch_page("pages/7_My_Profile.py")
         with col_b:
             if st.button(
                 "🎯 Match" if lang == "en" else "🎯 配對",
                 key="sidebar_profile_match_btn",
-                use_container_width=True,
+                use_container_width=False,
             ):
                 st.switch_page("pages/8_Smart_Matcher.py")

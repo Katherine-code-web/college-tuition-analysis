@@ -120,7 +120,7 @@ with st.form("profile_form"):
             score_100 = st.number_input(
                 "Score (0–100) / 百分制成績",
                 min_value=0.0, max_value=100.0,
-                value=float(existing.get("score_100", 85.0)),
+                value=float(existing.get("score_100") or 85.0),
                 step=0.5,
             )
             gpa = round((score_100 / 100) * 4.0, 2)
@@ -129,7 +129,7 @@ with st.form("profile_form"):
             gpa = st.number_input(
                 "GPA (0.0 – 4.0)",
                 min_value=0.0, max_value=4.0,
-                value=float(existing.get("gpa", 3.5)),
+                value=float(existing.get("gpa") or 3.5),
                 step=0.01,
             )
             score_100 = None
@@ -138,7 +138,7 @@ with st.form("profile_form"):
         class_rank = st.number_input(
             "Class Rank — Top % (optional) / 班級排名 top %（選填）",
             min_value=0.0, max_value=100.0,
-            value=float(existing.get("class_rank", 0.0)),
+            value=float(existing.get("class_rank") or 0.0),
             step=1.0,
             help="Enter 10 if you are in the top 10% of your class. Leave 0 if unknown.",
         )
@@ -316,7 +316,6 @@ with st.form("profile_form"):
 
     submitted = st.form_submit_button(
         "✅ Save My Profile" if lang == "en" else "✅ 儲存條件",
-        use_container_width=True,
         type="primary",
     )
 
@@ -427,6 +426,5 @@ if profile.get("profile_complete"):
     if st.button(
         "🎯 Go to Smart Matcher" if lang == "en" else "🎯 前往 Smart Matcher",
         type="primary",
-        use_container_width=True,
     ):
         st.switch_page("pages/8_Smart_Matcher.py")
