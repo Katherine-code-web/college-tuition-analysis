@@ -93,7 +93,7 @@ def get_budget_fit(user_profile: dict, school: dict) -> tuple[str, str]:
     cost = (school.get("tuition_out") if is_intl else None) or school.get("net_price")
     budget = user_profile.get("annual_budget") or 50000
 
-    if cost is None:
+    if cost is None or (isinstance(cost, float) and pd.isna(cost)):
         return "❓ Cost data unavailable", "#9E9E9E"
 
     cost = int(cost)
