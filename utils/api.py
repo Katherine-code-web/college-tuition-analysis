@@ -287,6 +287,99 @@ def get_school_programs(school_id: int) -> list[dict]:
         return []
 
 
+# ── Matcher-specific fields (includes SAT/ACT percentiles) ────────────────────
+MATCHER_FIELDS = FIELDS + "," + ",".join([
+    "latest.admissions.sat_scores.25th_percentile.math",
+    "latest.admissions.sat_scores.75th_percentile.math",
+    "latest.admissions.sat_scores.25th_percentile.critical_reading",
+    "latest.admissions.sat_scores.75th_percentile.critical_reading",
+    "latest.admissions.act_scores.25th_percentile.cumulative",
+    "latest.admissions.act_scores.75th_percentile.cumulative",
+])
+
+
+def matcher_result_to_row(r: dict) -> dict:
+    """Like results_to_df rows but also extracts SAT/ACT percentile fields."""
+    ownership_code = r.get("school.ownership")
+    net_price = (
+        r.get("latest.cost.avg_net_price.public")
+        if ownership_code == 1
+        else r.get("latest.cost.avg_net_price.private")
+    )
+    sat_m25 = r.get("latest.admissions.sat_scores.25th_percentile.math") or 0
+    sat_m75 = r.get("latest.admissions.sat_scores.75th_percentile.math") or 0
+    sat_v25 = r.get("latest.admissions.sat_scores.25th_percentile.critical_reading") or 0
+    sat_v75 = r.get("latest.admissions.sat_scores.75th_percentile.critical_reading") or 0
+    return {
+        "id": r.get("id"),
+        "name": r.get("school.name"),
+        "state": r.get("school.state"),
+        "city": r.get("school.city"),
+        "ownership_code": ownership_code,
+        "type_en": OWNERSHIP_MAP.get(ownership_code, "Unknown"),
+        "type_zh": OWNERSHIP_MAP_ZH.get(ownership_code, "未知"),
+        "url": r.get("school.school_url"),
+        "tuition_in": r.get("latest.cost.tuition.in_state"),
+        "tuition_out": r.get("latest.cost.tuition.out_of_state"),
+        "net_price": net_price,
+        "earnings_10yr": r.get("latest.earnings.10_yrs_after_entry.median"),
+        "earnings_6yr": r.get("latest.earnings.6_yrs_after_entry.median"),
+        "median_debt": r.get("latest.aid.median_debt.completers.overall"),
+        "pell_rate": r.get("latest.aid.pell_grant_rate"),
+        "completion_rate": r.get("latest.completion.rate_suppressed.overall"),
+        "enrollment": r.get("latest.student.size"),
+        "admission_rate": r.get("latest.admissions.admission_rate.overall"),
+        "sat_avg": r.get("latest.admissions.sat_scores.average.overall"),
+        "sat_p25": (sat_v25 + sat_m25) if (sat_v25 and sat_m25) else None,
+        "sat_p75": (sat_v75 + sat_m75) if (sat_v75 and sat_m75) else None,
+        "act_p25": r.get("latest.admissions.act_scores.25th_percentile.cumulative"),
+        "act_p75": r.get("latest.admissions.act_scores.75th_percentile.cumulative"),
+    }
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_candidate_schools(
+    states: tuple[str, ...] = (),
+    ownership: int = 0,
+    per_page: int = 100,
+    n_pages: int = 2,
+) -> list[dict]:
+    """
+    Fetch a large batch of schools for Smart Matcher scoring.
+    Uses MATCHER_FIELDS so SAT/ACT percentile data is included.
+    Cache key includes states + ownership so different filters get separate caches.
+    """
+    all_results: list[dict] = []
+
+    for page_num in range(n_pages):
+        params: dict = {
+            "api_key": get_api_key(),
+            "fields": MATCHER_FIELDS,
+            "per_page": per_page,
+            "page": page_num,
+            "_sort": "latest.completion.rate_suppressed.overall:desc",
+            "latest.student.size__range": "200..",  # exclude very small schools
+        }
+        if states:
+            params["school.state"] = ",".join(states)
+        if ownership:
+            params["school.ownership"] = ownership
+
+        try:
+            resp = requests.get(API_BASE, params=params, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", [])
+            total = data.get("metadata", {}).get("total", 0)
+            all_results.extend(results)
+            if len(all_results) >= total:
+                break
+        except requests.RequestException:
+            break
+
+    return all_results
+
+
 def fmt_usd(value, na="N/A") -> str:
     """Format a number as USD string."""
     if value is None or pd.isna(value):

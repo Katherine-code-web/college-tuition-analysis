@@ -14,6 +14,7 @@ from utils.calculations import (
     programs_to_df, CRED_LEVEL_MAP, CRED_LEVEL_MAP_ZH,
 )
 from utils.scholarships import EXTERNAL_SCHOLARSHIPS
+from utils.sidebar import render_profile_status
 
 st.set_page_config(page_title="School Profile", page_icon="🔍", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
@@ -23,6 +24,7 @@ lang = st.session_state.get("lang", "en")
 
 with st.sidebar:
     st.caption(t("data_source", lang))
+    render_profile_status(lang)
 
 st.title(f"🔍 {t('search_title', lang)}")
 st.markdown(t("search_desc", lang))

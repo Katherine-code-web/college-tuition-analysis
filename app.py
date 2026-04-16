@@ -7,6 +7,7 @@ import streamlit as st
 from utils.theme import get_theme_css
 from utils.translations import t, T
 from utils.advisors import ADVISORS, DEFAULT_ADVISOR
+from utils.sidebar import render_profile_status
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -63,6 +64,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption(t("data_source", lang))
+    render_profile_status(lang)
 
 lang = st.session_state.lang
 
