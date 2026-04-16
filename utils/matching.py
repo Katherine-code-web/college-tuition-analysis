@@ -1,9 +1,9 @@
 """
 Matching utilities for Smart School Matcher.
 
-Admission probability estimates are rough approximations based on
-publicly available score distributions only. They do NOT account for
-essays, recommendations, demographics, yield management, or holistic review.
+Admission probability estimates are rough approximations based on publicly
+available score distributions only. They do NOT account for essays,
+recommendations, demographics, yield management, or holistic review.
 """
 
 import pandas as pd
@@ -16,9 +16,7 @@ def estimate_admission_probability(
 ) -> tuple[float | None, bool]:
     """
     Estimate admission probability for a user at a given school.
-
     Returns (probability_0_to_1, has_score_data).
-    has_score_data = True when test-score percentile data was used.
     """
     base_rate = school.get("admission_rate")
     if base_rate is None or base_rate <= 0:
@@ -27,7 +25,6 @@ def estimate_admission_probability(
     score_factor = 1.0
     has_score_data = False
 
-    # SAT adjustment
     user_sat = user_profile.get("sat")
     sat_p25 = school.get("sat_p25")
     sat_p75 = school.get("sat_p75")
@@ -36,15 +33,14 @@ def estimate_admission_probability(
         has_score_data = True
         mid = (sat_p25 + sat_p75) / 2
         if user_sat >= sat_p75:
-            score_factor = 1.8   # above school's P75
+            score_factor = 1.8
         elif user_sat >= mid:
             score_factor = 1.3
         elif user_sat >= sat_p25:
             score_factor = 1.0
         else:
-            score_factor = 0.5   # below school's P25
+            score_factor = 0.5
     else:
-        # Fall back to ACT only when no SAT provided
         user_act = user_profile.get("act")
         act_p25 = school.get("act_p25")
         act_p75 = school.get("act_p75")
@@ -60,7 +56,6 @@ def estimate_admission_probability(
             else:
                 score_factor = 0.5
 
-    # GPA adjustment
     user_gpa = user_profile.get("gpa")
     if user_gpa:
         if user_gpa >= 3.9:
@@ -79,7 +74,7 @@ def estimate_admission_probability(
 
 
 def classify_school(prob: float | None) -> str:
-    """Classify as Reach / Target / Safety based on estimated admit probability."""
+    """Classify as Reach / Target / Safety."""
     if prob is None:
         return "Unknown"
     if prob < 0.25:
@@ -88,53 +83,6 @@ def classify_school(prob: float | None) -> str:
         return "Target"
     else:
         return "Safety"
-
-
-# ── Match Score ────────────────────────────────────────────────────────────────
-
-def calculate_match_score(
-    user_profile: dict, school: dict
-) -> tuple[float, dict]:
-    """
-    Calculate personalized match score (0–10) from user's priority weights.
-
-    Returns (total_score, component_scores_0_to_1).
-    """
-    weights = user_profile.get("priority_weights") or {
-        "cp_value": 3, "prestige": 2, "low_cost": 3, "employment": 2
-    }
-    total_weight = sum(weights.values()) or 1
-    norm = {k: v / total_weight for k, v in weights.items()}
-
-    is_intl = user_profile.get("nationality", "United States") != "United States"
-    scores = {}
-
-    # 1) CP Value — value_score is already enriched by enrich_df
-    vs = school.get("value_score")
-    scores["cp_value"] = min(vs / 10.0, 1.0) if vs is not None else 0.3
-
-    # 2) Prestige — use (1 - admit rate) as proxy
-    adm = school.get("admission_rate")
-    scores["prestige"] = (1.0 - adm) if adm is not None else 0.5
-
-    # 3) Low cost relative to budget
-    if is_intl:
-        cost = school.get("tuition_out") or school.get("net_price") or 55000
-    else:
-        cost = school.get("net_price") or 40000
-    budget = user_profile.get("annual_budget") or 50000
-    if cost <= budget:
-        scores["low_cost"] = 1.0 - (cost / budget) * 0.4  # cheapest=1.0, at-budget=0.6
-    else:
-        over_pct = (cost - budget) / budget
-        scores["low_cost"] = max(0.0, 1.0 - over_pct * 1.5)
-
-    # 4) Employment outcomes
-    earn = school.get("earnings_10yr")
-    scores["employment"] = min(earn / 120000, 1.0) if earn else 0.3
-
-    total = sum(scores.get(k, 0) * norm.get(k, 0) for k in norm)
-    return round(total * 10, 2), scores
 
 
 # ── Budget Fit ─────────────────────────────────────────────────────────────────
@@ -147,43 +95,108 @@ def get_budget_fit(user_profile: dict, school: dict) -> tuple[str, str]:
 
     if cost is None:
         return "❓ Cost data unavailable", "#9E9E9E"
+
+    cost = int(cost)
+    budget = int(budget)
+
     if cost <= budget:
-        return f"✓ Fits your ${budget:,} budget", "#2E7D32"
+        return f"✅ Fits ${budget:,} budget", "#2E7D32"
     over = cost - budget
-    return f"⚠️ ${over:,}/yr over budget", "#E65100"
+    if over <= budget * 0.2:
+        return f"⚠️ ${over:,}/yr over budget", "#E65100"
+    return f"🚫 ${over:,}/yr over budget", "#B71C1C"
 
 
-# ── Batch scoring ──────────────────────────────────────────────────────────────
+# ── Percentile-ranked batch scoring ───────────────────────────────────────────
 
 def score_schools_df(user_profile: dict, df: pd.DataFrame) -> pd.DataFrame:
     """
-    Apply match score + admission probability to every row in the DataFrame.
+    Score all schools using percentile ranking so scores spread across 0–10.
 
-    Adds columns:
-      match_score, admit_prob, admit_category,
-      budget_fit_text, budget_fit_color
+    Each dimension is ranked 0–1 relative to the other schools in df
+    (not an absolute scale), so the best school always approaches 10
+    and the worst approaches 0.
+
+    Expects optional columns already on df:
+      - field_earnings: field-specific median earnings (overrides earnings_10yr
+        for the employment dimension when present)
+      - has_target_field: True/False/None — adds a penalty for False schools
     """
+    if df.empty:
+        return df
+
     df = df.copy()
+    is_intl = user_profile.get("nationality", "United States") != "United States"
+    weights = user_profile.get("priority_weights") or {
+        "cp_value": 3, "prestige": 2, "low_cost": 3, "employment": 2,
+    }
+    total_w = sum(weights.values()) or 1
+
+    # ── Dimension 1: CP Value (higher value_score = better) ──────────────────
+    df["_cp"] = df["value_score"].fillna(0).rank(pct=True, method="average")
+
+    # ── Dimension 2: Prestige (lower admission rate = higher prestige) ────────
+    df["_prestige"] = (1.0 - df["admission_rate"].fillna(0.5)).rank(
+        pct=True, method="average"
+    )
+
+    # ── Dimension 3: Cost (lower cost = better) ───────────────────────────────
+    if is_intl:
+        cost_col = df["tuition_out"].fillna(df["net_price"]).fillna(55000)
+    else:
+        cost_col = df["net_price"].fillna(40000)
+    # Negate: cheaper schools get a higher rank
+    df["_cost"] = (-cost_col).rank(pct=True, method="average")
+
+    # ── Dimension 4: Employment (higher earnings = better) ────────────────────
+    # Use field_earnings where available, fall back to school-wide earnings
+    if "field_earnings" in df.columns:
+        earn_col = df["field_earnings"].fillna(df["earnings_10yr"]).fillna(0)
+    else:
+        earn_col = df["earnings_10yr"].fillna(0)
+    df["_employ"] = earn_col.rank(pct=True, method="average")
+
+    # ── Field presence penalty ────────────────────────────────────────────────
+    # Schools confirmed to NOT have the user's field lose 0.15 from their raw score.
+    if "has_target_field" in df.columns:
+        df["_field_pen"] = df["has_target_field"].apply(
+            lambda v: -0.15 if v is False else 0.0
+        )
+    else:
+        df["_field_pen"] = 0.0
+
+    # ── Weighted sum (0–1 scale, may go slightly negative after penalty) ──────
+    df["_raw"] = (
+        df["_cp"]      * weights.get("cp_value",  3) / total_w
+        + df["_prestige"] * weights.get("prestige",  2) / total_w
+        + df["_cost"]     * weights.get("low_cost",  3) / total_w
+        + df["_employ"]   * weights.get("employment", 2) / total_w
+        + df["_field_pen"]
+    ).clip(0.0, 1.0)
+
+    # ── Final percentile rank → 0–10 ─────────────────────────────────────────
+    df["match_score"] = (
+        df["_raw"].rank(pct=True, method="average") * 10
+    ).round(1)
+
+    # Drop temp columns
+    df = df.drop(columns=[c for c in df.columns if c.startswith("_")])
+
+    # ── Admission probability + budget fit (per-row) ──────────────────────────
     rows = df.to_dict("records")
-
-    match_scores, admit_probs, admit_cats = [], [], []
-    budget_texts, budget_colors = [], []
-
+    admit_probs, admit_cats, budget_texts, budget_colors = [], [], [], []
     for school in rows:
-        ms, _ = calculate_match_score(user_profile, school)
         prob, _ = estimate_admission_probability(user_profile, school)
         cat = classify_school(prob)
         bt, bc = get_budget_fit(user_profile, school)
-
-        match_scores.append(ms)
         admit_probs.append(prob)
         admit_cats.append(cat)
         budget_texts.append(bt)
         budget_colors.append(bc)
 
-    df["match_score"] = match_scores
     df["admit_prob"] = admit_probs
     df["admit_category"] = admit_cats
     df["budget_fit_text"] = budget_texts
     df["budget_fit_color"] = budget_colors
+
     return df

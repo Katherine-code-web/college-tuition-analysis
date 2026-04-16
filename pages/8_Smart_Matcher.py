@@ -13,6 +13,7 @@ from utils.api import (
 )
 from utils.calculations import enrich_df, CIP_CATEGORIES
 from utils.matching import score_schools_df, classify_school
+from utils.field_suggestions import get_field_hint
 
 st.set_page_config(page_title="Smart Matcher", page_icon="🎯", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
@@ -195,35 +196,40 @@ if df.empty:
 
 df = enrich_df(df)
 
+# ── Budget hard cap: exclude schools > budget × 1.2 ──────────────────────────
+_budget = budget_override or 50000
+_is_intl = effective_profile.get("nationality", "United States") != "United States"
+df["effective_price"] = df["tuition_out"].fillna(df["net_price"]) if _is_intl else df["net_price"]
+# Keep schools that either have no price data OR are within 1.2× budget
+_within_budget = df["effective_price"].isna() | (df["effective_price"] <= _budget * 1.2)
+df = df[_within_budget].copy()
+
 if not include_no_data:
     df = df.dropna(subset=["earnings_10yr", "net_price"])
 
 if df.empty:
-    st.warning(
-        "All matched schools are missing earnings/cost data. "
-        "Toggle 'Include schools with missing data' in the sidebar."
+    st.error(
+        "No schools match your budget and data requirements. "
+        "Try increasing your annual budget in the sidebar or toggle "
+        "'Include schools with missing data'."
         if lang == "en"
-        else "所有符合條件的學校都缺少收入/費用資料。請在左側選單開啟「包含資料缺失學校」。"
+        else "找不到符合預算且有完整資料的學校。請在左側提高年預算，或開啟「包含資料缺失學校」。"
     )
     st.stop()
 
-df = score_schools_df(effective_profile, df)
-df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
-
-# ── Field-specific re-scoring ─────────────────────────────────────────────────
-# Fetch program-level earnings for the user's target field in top 25 schools.
-# Uses cached get_school_programs, so slow only on first run.
+# ── Fetch field-specific earnings BEFORE scoring ──────────────────────────────
+# This lets score_schools_df use field_earnings in the employment dimension
+# so the percentile ranking reflects your actual target field.
+field_earn_map: dict[int, float] = {}
+field_present_map: dict[int, bool] = {}
 if cip_prefix:
     with st.spinner(
-        f"🎓 Checking {field_override} program data for top schools..."
+        f"🎓 Checking {field_override} program data..."
         if lang == "en"
-        else f"🎓 查詢各學校「{field_override}」科系薪資資料..."
+        else f"🎓 查詢「{field_override}」科系薪資資料..."
     ):
-        top_ids = df.head(25)["id"].dropna().astype(int).tolist()
-        field_earn_map: dict[int, float] = {}
-        field_present_map: dict[int, bool] = {}
-
-        for school_id in top_ids:
+        candidate_ids = df["id"].dropna().astype(int).tolist()[:50]
+        for school_id in candidate_ids:
             try:
                 programs = get_school_programs(school_id)
                 matching = [
@@ -239,37 +245,15 @@ if cip_prefix:
             except Exception:
                 pass
 
-    # Apply field-specific adjustment to match scores
-    w_employment = effective_profile.get("priority_weights", {}).get("employment", 2)
-    total_w = sum(effective_profile.get("priority_weights", {}).values()) or 1
-    employ_weight_share = w_employment / total_w  # fraction of score from employment
-
-    def _adjust_score(row: pd.Series) -> float:
-        sid = int(row["id"]) if pd.notna(row.get("id")) else None
-        base = row["match_score"]
-        if sid is None:
-            return base
-        # Big penalty if school doesn't offer the user's field at all
-        if field_present_map.get(sid) is False:
-            return max(0.0, base - 2.5)
-        # Recalculate employment component with field-specific earnings
-        if sid in field_earn_map:
-            overall_earn = row.get("earnings_10yr") or 50000
-            field_earn = field_earn_map[sid]
-            old_employ = min(overall_earn / 120000, 1.0)
-            new_employ = min(field_earn / 120000, 1.0)
-            delta = (new_employ - old_employ) * employ_weight_share * 10
-            return round(min(10.0, max(0.0, base + delta)), 2)
-        return base
-
-    df["match_score"] = df.apply(_adjust_score, axis=1)
     df["field_earnings"] = df["id"].apply(
         lambda x: field_earn_map.get(int(x)) if pd.notna(x) else None
     )
     df["has_target_field"] = df["id"].apply(
         lambda x: field_present_map.get(int(x)) if pd.notna(x) else None
     )
-    df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
+
+df = score_schools_df(effective_profile, df)
+df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
 
 # Split into categories
 reach_df = df[df["admit_category"] == "Reach"].head(5)
@@ -278,12 +262,25 @@ safety_df = df[df["admit_category"] == "Safety"].head(5)
 unknown_df = df[df["admit_category"] == "Unknown"].head(3)
 
 field_label = field_override if lang == "en" else field_override
-n_with_field = int(df.get("has_target_field", pd.Series()).sum()) if "has_target_field" in df.columns else len(df)
+n_with_field = int(df["has_target_field"].sum()) if "has_target_field" in df.columns else len(df)
 st.markdown(
     f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs."
     if lang == "en"
     else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系。"
 )
+
+# Show credential hint if no field data found
+if cip_prefix and "has_target_field" in df.columns and n_with_field == 0:
+    hint = get_field_hint(cip_prefix, lang)
+    if hint:
+        st.warning(hint)
+    else:
+        st.warning(
+            f"⚠️ No schools in results have confirmed **{field_label}** program data. "
+            "Schools below are ranked by overall fit instead."
+            if lang == "en"
+            else f"⚠️ 結果中沒有學校有確認的「{field_label}」科系資料，以整體條件排名取代。"
+        )
 
 # ── School Card Helper ─────────────────────────────────────────────────────────
 
@@ -295,7 +292,7 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
     match_score = row.get("match_score", 0)
     admit_prob = row.get("admit_prob")
     prob_str = (
-        f"~{admit_prob * 100:.0f}% (est.)"
+        f"{admit_prob * 100:.0f}% admit chance"
         if admit_prob is not None
         else "N/A"
     )
@@ -552,45 +549,51 @@ with st.expander(
     st.markdown(
         "#### Your Priority Weights" if lang == "en" else "#### 你的優先排序"
     )
-    pc1, pc2, pc3, pc4 = st.columns(4)
-    metrics = [
+    weight_items = [
         ("📈 CP Value", w.get("cp_value", 3)),
         ("🏆 Prestige", w.get("prestige", 2)),
         ("💰 Low Cost", w.get("low_cost", 3)),
         ("💼 Employment", w.get("employment", 3)),
     ]
-    for col, (label, val) in zip([pc1, pc2, pc3, pc4], metrics):
-        col.metric(label, f"{val}/5", f"{val/total_w*100:.0f}% weight")
+    for label, val in weight_items:
+        bar = "🟧" * int(val) + "⬜" * (5 - int(val))
+        pct = f"{val / total_w * 100:.0f}%"
+        st.markdown(
+            f"**{label}** &nbsp; {bar} &nbsp; "
+            f"<span style='color:#888;font-size:0.88rem;'>{val}/5 · {pct} of score</span>",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown(
         """
 #### How Match Score is Calculated
-Each school is rated 0–1 on four dimensions, then combined using your weights:
+Each school is **percentile-ranked** against all other results on four dimensions,
+so scores always spread 0–10 (the best school in your results ≈ 10, worst ≈ 0).
 
 | Dimension | Data Used | Higher = |
 |-----------|-----------|---------|
-| **CP Value** | `10yr earnings ÷ net price × grad rate` (capped at 10) | Better ROI |
+| **CP Value** | `10yr earnings ÷ net price × grad rate` | Better ROI |
 | **Prestige** | `1 − admission rate` | More selective |
-| **Low Cost** | How well cost fits within your budget | Cheaper |
-| **Employment** | Median 10yr earnings (capped at $120k) | Higher earnings |
+| **Low Cost** | Annual cost (cheaper = better rank) | Cheaper |
+| **Employment** | Field-specific earnings where available, else school-wide 10yr median | Higher earnings |
 
-Final score = weighted average × 10, displayed as 0–10.
+Schools confirmed **not** to offer your target field lose a fixed penalty before final ranking.
         """
         if lang == "en"
         else
         """
 #### 配對分數計算方式
-每所學校在四個維度各得 0–1 分，再依你的優先權重加權平均：
+每所學校在四個維度以**百分位排名**互相比較，所以分數永遠分散在 0–10 之間（你的結果中最好的學校 ≈ 10 分，最差 ≈ 0 分）。
 
 | 維度 | 使用資料 | 分數越高代表 |
 |------|---------|------------|
-| **CP 值** | `10年薪資 ÷ 淨學費 × 畢業率`（上限 10）| ROI 越好 |
+| **CP 值** | `10年薪資 ÷ 淨學費 × 畢業率` | ROI 越好 |
 | **聲望** | `1 − 錄取率` | 越難進 |
-| **低費用** | 費用與你的預算的差距 | 越便宜 |
-| **就業** | 10 年後中位薪資（上限 $120k）| 薪資越高 |
+| **低費用** | 年費用（越便宜排名越高）| 越便宜 |
+| **就業** | 有科系薪資資料時用科系薪資，否則用學校整體 10 年薪資 | 薪資越高 |
 
-最終分數 = 加權平均 × 10，以 0–10 分顯示。
+確認**不提供**你目標科系的學校，在最終排名前會扣除固定懲罰分。
         """
     )
 

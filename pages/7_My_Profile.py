@@ -395,24 +395,33 @@ if profile.get("profile_complete"):
         f"Jobs ×{w.get('employment',3)}"
     )
 
-    rows_html = "".join([
-        _row("Nationality / 國籍", p.get("nationality", "—")),
-        _row("Current Education / 目前學歷", p.get("current_edu", "—")),
-        _row("Target Degree / 目標學位", p.get("target_degree", "—")),
-        _row("Target Term / 預計入學", p.get("target_term", "—")),
-        _row("Field of Study / 目標科系", p.get("target_field", "—")),
-        _row("GPA", gpa_disp),
-        _row("100-pt Score / 百分制", score_disp),
-        _row("Language Test / 語言", test_disp),
-        _row("SAT", sat_disp),
-        _row("ACT", act_disp),
-        _row("GRE", gre_disp),
-        _row("GMAT", gmat_disp),
-        _row("Annual Budget / 年預算", budget_disp),
-        _row("Preferred States / 偏好州", states_disp),
-        _row("School Type / 學校類型", p.get("preferred_type", "Any")),
-        _row("Priority Weights / 優先排序", weights_disp),
-    ])
+    # Build rows, skipping test scores that are empty ("—")
+    always_rows = [
+        ("Nationality / 國籍", p.get("nationality", "—")),
+        ("Current Education / 目前學歷", p.get("current_edu", "—")),
+        ("Target Degree / 目標學位", p.get("target_degree", "—")),
+        ("Target Term / 預計入學", p.get("target_term", "—")),
+        ("Field of Study / 目標科系", p.get("target_field", "—")),
+        ("GPA", gpa_disp),
+    ]
+    optional_rows = [
+        ("100-pt Score / 百分制", score_disp),
+        ("Language Test / 語言", test_disp),
+        ("SAT", sat_disp),
+        ("ACT", act_disp),
+        ("GRE", gre_disp),
+        ("GMAT", gmat_disp),
+    ]
+    footer_rows = [
+        ("Annual Budget / 年預算", budget_disp),
+        ("Preferred States / 偏好州", states_disp),
+        ("School Type / 學校類型", p.get("preferred_type", "Any")),
+        ("Priority Weights / 優先排序", weights_disp),
+    ]
+    rows_html = "".join(
+        _row(label, val)
+        for label, val in always_rows + [r for r in optional_rows if r[1] != "—"] + footer_rows
+    )
 
     st.markdown(
         f'<div style="background:white;border:2.5px solid #1A1A1A;border-radius:14px;'
