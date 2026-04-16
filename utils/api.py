@@ -341,13 +341,16 @@ def matcher_result_to_row(r: dict) -> dict:
 def fetch_candidate_schools(
     states: tuple[str, ...] = (),
     ownership: int = 0,
+    cip_2digit: str = "",
     per_page: int = 100,
     n_pages: int = 2,
 ) -> list[dict]:
     """
     Fetch a large batch of schools for Smart Matcher scoring.
     Uses MATCHER_FIELDS so SAT/ACT percentile data is included.
-    Cache key includes states + ownership so different filters get separate caches.
+
+    cip_2digit: 2-digit CIP prefix (e.g. "22" for Law, "51" for Medicine).
+    When provided, filters the API to schools that offer programs in that CIP range.
     """
     all_results: list[dict] = []
 
@@ -358,12 +361,18 @@ def fetch_candidate_schools(
             "per_page": per_page,
             "page": page_num,
             "_sort": "latest.completion.rate_suppressed.overall:desc",
-            "latest.student.size__range": "200..",  # exclude very small schools
+            "latest.student.size__range": "200..",
         }
         if states:
             params["school.state"] = ",".join(states)
         if ownership:
             params["school.ownership"] = ownership
+        if cip_2digit:
+            # Filter to schools that offer programs in this CIP 2-digit category.
+            # College Scorecard stores 4-digit codes, so CIP "22" maps to 2200..2299.
+            lo = int(cip_2digit) * 100
+            hi = lo + 99
+            params["latest.programs.cip_4_digit.code__range"] = f"{lo}..{hi}"
 
         try:
             resp = requests.get(API_BASE, params=params, timeout=20)

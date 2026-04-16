@@ -9,7 +9,7 @@ from utils.theme import get_theme_css
 from utils.sidebar import render_profile_status
 from utils.api import (
     fetch_candidate_schools, matcher_result_to_row,
-    fmt_usd, fmt_pct,
+    get_school_programs, fmt_usd, fmt_pct,
 )
 from utils.calculations import enrich_df, CIP_CATEGORIES
 from utils.matching import score_schools_df, classify_school
@@ -148,21 +148,36 @@ if not st.session_state.get("matcher_run"):
 # Build an effective profile with sidebar overrides
 effective_profile = {**profile, "annual_budget": budget_override}
 
+# Derive CIP 2-digit prefix from profile field selection
+target_cip = effective_profile.get("target_field_cip", "")
+cip_prefix = target_cip[:2] if target_cip else ""
+
 with st.spinner(
-    "🔍 Searching and scoring schools for you..." if lang == "en"
-    else "🔍 搜尋並評分學校中..."
+    f"🔍 Searching schools offering {field_override}..." if lang == "en"
+    else f"🔍 搜尋提供「{field_override}」的學校..."
 ):
     raw = fetch_candidate_schools(
         states=preferred_states,
         ownership=ownership_code,
+        cip_2digit=cip_prefix,
         per_page=100,
         n_pages=2,
     )
-    if not raw:
-        # Fallback: no state filter
+    # Fallback 1: drop state filter if too few results
+    if len(raw) < 10 and preferred_states:
         raw = fetch_candidate_schools(
             states=(),
             ownership=ownership_code,
+            cip_2digit=cip_prefix,
+            per_page=100,
+            n_pages=2,
+        )
+    # Fallback 2: drop CIP filter too (API may not support it for all fields)
+    if len(raw) < 10:
+        raw = fetch_candidate_schools(
+            states=preferred_states or (),
+            ownership=ownership_code,
+            cip_2digit="",
             per_page=100,
             n_pages=2,
         )
@@ -180,7 +195,6 @@ if df.empty:
 
 df = enrich_df(df)
 
-# Drop schools with missing critical data if user chose to exclude them
 if not include_no_data:
     df = df.dropna(subset=["earnings_10yr", "net_price"])
 
@@ -196,16 +210,79 @@ if df.empty:
 df = score_schools_df(effective_profile, df)
 df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
 
+# ── Field-specific re-scoring ─────────────────────────────────────────────────
+# Fetch program-level earnings for the user's target field in top 25 schools.
+# Uses cached get_school_programs, so slow only on first run.
+if cip_prefix:
+    with st.spinner(
+        f"🎓 Checking {field_override} program data for top schools..."
+        if lang == "en"
+        else f"🎓 查詢各學校「{field_override}」科系薪資資料..."
+    ):
+        top_ids = df.head(25)["id"].dropna().astype(int).tolist()
+        field_earn_map: dict[int, float] = {}
+        field_present_map: dict[int, bool] = {}
+
+        for school_id in top_ids:
+            try:
+                programs = get_school_programs(school_id)
+                matching = [
+                    p for p in programs
+                    if str(p.get("cip_code", ""))[:2] == cip_prefix
+                    and p.get("median_earnings")
+                ]
+                if matching:
+                    field_earn_map[school_id] = max(p["median_earnings"] for p in matching)
+                    field_present_map[school_id] = True
+                else:
+                    field_present_map[school_id] = False
+            except Exception:
+                pass
+
+    # Apply field-specific adjustment to match scores
+    w_employment = effective_profile.get("priority_weights", {}).get("employment", 2)
+    total_w = sum(effective_profile.get("priority_weights", {}).values()) or 1
+    employ_weight_share = w_employment / total_w  # fraction of score from employment
+
+    def _adjust_score(row: pd.Series) -> float:
+        sid = int(row["id"]) if pd.notna(row.get("id")) else None
+        base = row["match_score"]
+        if sid is None:
+            return base
+        # Big penalty if school doesn't offer the user's field at all
+        if field_present_map.get(sid) is False:
+            return max(0.0, base - 2.5)
+        # Recalculate employment component with field-specific earnings
+        if sid in field_earn_map:
+            overall_earn = row.get("earnings_10yr") or 50000
+            field_earn = field_earn_map[sid]
+            old_employ = min(overall_earn / 120000, 1.0)
+            new_employ = min(field_earn / 120000, 1.0)
+            delta = (new_employ - old_employ) * employ_weight_share * 10
+            return round(min(10.0, max(0.0, base + delta)), 2)
+        return base
+
+    df["match_score"] = df.apply(_adjust_score, axis=1)
+    df["field_earnings"] = df["id"].apply(
+        lambda x: field_earn_map.get(int(x)) if pd.notna(x) else None
+    )
+    df["has_target_field"] = df["id"].apply(
+        lambda x: field_present_map.get(int(x)) if pd.notna(x) else None
+    )
+    df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
+
 # Split into categories
 reach_df = df[df["admit_category"] == "Reach"].head(5)
 target_df = df[df["admit_category"] == "Target"].head(5)
 safety_df = df[df["admit_category"] == "Safety"].head(5)
 unknown_df = df[df["admit_category"] == "Unknown"].head(3)
 
+field_label = field_override if lang == "en" else field_override
+n_with_field = int(df.get("has_target_field", pd.Series()).sum()) if "has_target_field" in df.columns else len(df)
 st.markdown(
-    f"**{len(df)} schools scored** — showing top matches by category."
+    f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs."
     if lang == "en"
-    else f"**已評分 {len(df)} 所學校** — 依類別顯示最佳配對。"
+    else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系。"
 )
 
 # ── School Card Helper ─────────────────────────────────────────────────────────
@@ -232,10 +309,25 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
         else ("外州學費" if is_intl else "淨學費（助學金後）")
     )
 
-    earn_str = fmt_usd(row.get("earnings_10yr"))
+    # Show field-specific earnings if available, otherwise school-wide
+    field_earn = row.get("field_earnings")
+    has_field = row.get("has_target_field")
+    if field_earn:
+        earn_str = f"{fmt_usd(field_earn)} <span style='font-size:0.72rem;color:#2E7D32;'>(your field)</span>"
+    else:
+        earn_str = fmt_usd(row.get("earnings_10yr"))
     grad_str = fmt_pct(row.get("completion_rate"))
     budget_text = row.get("budget_fit_text", "")
     budget_color = row.get("budget_fit_color", "#555")
+    field_tag = (
+        f'<span style="background:#DDFAE4;border:1.5px solid #6BCB77;border-radius:6px;'
+        f'padding:2px 7px;font-size:0.72rem;margin-right:4px;">✓ Offers your field</span>'
+        if has_field is True else (
+        f'<span style="background:#FFF3E8;border:1.5px solid #FF8C42;border-radius:6px;'
+        f'padding:2px 7px;font-size:0.72rem;margin-right:4px;">⚠️ Field data N/A</span>'
+        if has_field is False else ""
+        )
+    )
 
     # Star rating bar for match score
     filled = round(match_score / 2)  # 0-10 → 0-5 stars
@@ -290,9 +382,10 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
     🎓 <b>{"Grad Rate" if lang == "en" else "畢業率"}:</b> {grad_str}
   </div>
 
-  <div style="font-size:0.82rem;font-weight:800;color:{budget_color};margin-bottom:10px;">
+  <div style="font-size:0.82rem;font-weight:800;color:{budget_color};margin-bottom:6px;">
     {budget_text}
   </div>
+  <div style="margin-bottom:10px;">{field_tag}</div>
 
   <div>{url_html}</div>
 </div>
