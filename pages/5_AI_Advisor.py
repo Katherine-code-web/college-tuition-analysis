@@ -309,7 +309,7 @@ with st.chat_message("assistant", avatar=adv["emoji"]):
     full_response = ""
 
     with client.messages.stream(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-6",
         max_tokens=1200,
         system=system_prompt,
         messages=api_messages,
