@@ -1,0 +1,107 @@
+FOD1P,fod_name,cip_2digit,cip_category_name
+1100,Computer Science,11,Computer and Information Sciences
+1103,Information Technology,11,Computer and Information Sciences
+1104,Computer Programming,11,Computer and Information Sciences
+1105,Information Sciences,11,Computer and Information Sciences
+1106,Computer Administration/Management,11,Computer and Information Sciences
+4009,Data Science,11,Computer and Information Sciences
+2300,General Education,13,Education
+2301,Elementary Education,13,Education
+2303,Secondary Education,13,Education
+2304,Special Education,13,Education
+2305,Mathematics Education,13,Education
+2306,Science Education,13,Education
+2307,Education Administration,13,Education
+2308,School Counseling,13,Education
+2309,Social Science Education,13,Education
+2311,Physical Education,13,Education
+2312,Art and Music Education,13,Education
+2313,Language and Drama Education,13,Education
+2314,Teacher Education,13,Education
+2400,General Engineering,14,Engineering
+2401,Aerospace Engineering,14,Engineering
+2402,Biological Engineering,14,Engineering
+2403,Architectural Engineering,14,Engineering
+2404,Biomedical Engineering,14,Engineering
+2405,Chemical Engineering,14,Engineering
+2406,Civil Engineering,14,Engineering
+2407,Computer Engineering,14,Engineering
+2408,Electrical Engineering,14,Engineering
+2409,Mechanical Engineering,14,Engineering
+2410,Industrial Engineering,14,Engineering
+2411,Materials Engineering,14,Engineering
+2412,Environmental Engineering,14,Engineering
+2414,Metallurgical Engineering,14,Engineering
+2415,Mining Engineering,14,Engineering
+2416,Nuclear Engineering,14,Engineering
+2200,Architecture,04,Architecture and Related Services
+2201,Landscape Architecture,04,Architecture and Related Services
+5502,Legal Studies,22,Legal Professions and Studies
+5503,Pre-law,22,Legal Professions and Studies
+3600,Biology,26,Biological and Biomedical Sciences
+3601,Biochemistry,26,Biological and Biomedical Sciences
+3602,Molecular Biology,26,Biological and Biomedical Sciences
+3603,Botany,26,Biological and Biomedical Sciences
+3604,Cell Biology,26,Biological and Biomedical Sciences
+3606,Zoology,26,Biological and Biomedical Sciences
+3607,Ecology,26,Biological and Biomedical Sciences
+3608,Marine Biology,26,Biological and Biomedical Sciences
+3609,Genetics,26,Biological and Biomedical Sciences
+3611,Bioinformatics,26,Biological and Biomedical Sciences
+3700,Mathematics,27,Mathematics and Statistics
+3701,Applied Mathematics,27,Mathematics and Statistics
+3702,Statistics,27,Mathematics and Statistics
+4005,Chemistry,40,Physical Sciences
+4006,Physics,40,Physical Sciences
+4007,Geology,40,Physical Sciences
+4008,Earth Science,40,Physical Sciences
+4002,Astronomy,40,Physical Sciences
+5000,Psychology,42,Psychology
+5001,Clinical Psychology,42,Psychology
+5002,Cognitive Science,42,Psychology
+5003,Counseling Psychology,42,Psychology
+5004,Industrial Psychology,42,Psychology
+5200,Economics,45,Social Sciences
+5201,Anthropology,45,Social Sciences
+5202,Archaeology,45,Social Sciences
+5203,Criminology,45,Social Sciences
+5205,International Relations,45,Social Sciences
+5206,Geography,45,Social Sciences
+5301,Political Science,45,Social Sciences
+5400,Public Policy,44,Public Administration and Social Service
+5401,Public Administration,44,Public Administration and Social Service
+5500,General Social Sciences,45,Social Sciences
+5501,Sociology,45,Social Sciences
+5601,Social Work,44,Public Administration and Social Service
+6000,English,23,English Language and Literature
+6002,Composition and Rhetoric,23,English Language and Literature
+6003,History,54,History
+6004,Philosophy,38,Philosophy and Religious Studies
+6005,Communication,09,Communication and Journalism
+5901,Journalism,09,Communication and Journalism
+5902,Advertising,09,Communication and Journalism
+6100,Nursing,51,Health Professions and Related Programs
+6102,Public Health,51,Health Professions and Related Programs
+6103,Health Administration,51,Health Professions and Related Programs
+6104,Physical Therapy,51,Health Professions and Related Programs
+6105,Pharmacy,51,Health Professions and Related Programs
+6106,Medical Technology,51,Health Professions and Related Programs
+6107,Speech Pathology,51,Health Professions and Related Programs
+6108,Rehabilitation Therapy,51,Health Professions and Related Programs
+6109,Occupational Therapy,51,Health Professions and Related Programs
+6110,Nutrition,51,Health Professions and Related Programs
+6200,Business Management,52,Business Management Marketing and Related
+6201,Accounting,52,Business Management Marketing and Related
+6202,Finance,52,Business Management Marketing and Related
+6203,Marketing,52,Business Management Marketing and Related
+6204,Human Resources,52,Business Management Marketing and Related
+6205,Actuarial Science,52,Business Management Marketing and Related
+6206,General Business,52,Business Management Marketing and Related
+6207,MIS,52,Business Management Marketing and Related
+6209,Supply Chain,52,Business Management Marketing and Related
+6210,International Business,52,Business Management Marketing and Related
+6211,Hospitality Management,52,Business Management Marketing and Related
+6212,Operations Management,52,Business Management Marketing and Related
+6402,Music,50,Visual and Performing Arts
+6403,Fine Arts,50,Visual and Performing Arts
+6404,Film and Photography,50,Visual and Performing Arts

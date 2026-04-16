@@ -15,6 +15,7 @@ from utils.calculations import enrich_df, CIP_CATEGORIES
 from utils.matching import score_schools_df, classify_school
 from utils.field_suggestions import get_field_hint
 from utils.program_reputation import get_reputation_score
+from utils.earnings_fallback import get_field_earnings, earnings_confidence_html, CONFIDENCE_BADGES
 
 st.set_page_config(page_title="Smart Matcher", page_icon="🎯", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
@@ -271,6 +272,38 @@ if cip_prefix:
         lambda x: field_size_map.get(int(x), 0) if pd.notna(x) else 0
     )
 
+# ── Layer 2/3 earnings fallback ───────────────────────────────────────────────
+# When College Scorecard program earnings are suppressed, look up national
+# estimates from ACS PUMS (Layer 2) or BLS OEWS (Layer 3).
+# Attach both a fallback_earnings column (used for scoring) and
+# earnings_confidence column (used for UI badge display).
+_national_fallback: dict = {}
+if cip_prefix:
+    _national_fallback = get_field_earnings(cip_prefix, target_degree_val)
+
+def _resolve_earnings(row: pd.Series) -> tuple[float | None, str]:
+    """
+    Return (earnings_value, confidence_level) for one school row.
+    Priority: program (Scorecard) > field_national (ACS) > institution.
+    """
+    prog_earn = row.get("field_earnings")
+    if pd.notna(prog_earn) and prog_earn:
+        return prog_earn, "program"
+
+    nat_median = _national_fallback.get("median")
+    if nat_median:
+        return nat_median, _national_fallback.get("confidence", "field_national")
+
+    inst_earn = row.get("earnings_10yr")
+    if pd.notna(inst_earn) and inst_earn:
+        return inst_earn, "institution"
+
+    return None, "institution"
+
+_earn_vals, _earn_confs = zip(*[_resolve_earnings(row) for _, row in df.iterrows()]) if not df.empty else ([], [])
+df["display_earnings"] = list(_earn_vals)
+df["earnings_confidence"] = list(_earn_confs)
+
 # ── Reputation bonus (grad mode) ──────────────────────────────────────────────
 # For graduate programs, add program reputation scores from the lookup table.
 # score_schools_df uses this column to replace the cp_value dimension
@@ -281,6 +314,14 @@ if cip_prefix and target_degree_val in _GRAD_DEGREES:
     df["reputation_bonus"] = df["id"].apply(
         lambda x: get_reputation_score(cip_prefix, target_degree_val, int(x))
         if pd.notna(x) else None
+    )
+
+# Pass display_earnings into field_earnings so score_schools_df uses the best
+# available signal (program > national ACS > institution) for the employment dimension.
+# Only override where Scorecard program earnings are missing.
+if "field_earnings" in df.columns and "display_earnings" in df.columns:
+    df["field_earnings"] = df["field_earnings"].fillna(
+        df["display_earnings"].where(df["earnings_confidence"] == "field_national")
     )
 
 df = score_schools_df(effective_profile, df)
@@ -392,18 +433,12 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
         else ("外州學費" if is_intl else "淨學費（助學金後）")
     )
 
-    field_earn = row.get("field_earnings")
     has_field = row.get("has_target_field")
-    if field_earn:
-        earn_str = fmt_usd(field_earn)
-        earn_note = " <span style='color:#2E7D32;font-size:0.75rem;'>(field)</span>"
-    else:
-        earn_str = fmt_usd(row.get("earnings_10yr"))
-        earn_note = (
-            " <span style='color:#999;font-size:0.75rem;'>(school-wide)</span>"
-            if _is_grad_card and earn_str != "N/A"
-            else ""
-        )
+    earn_val = row.get("display_earnings") or row.get("field_earnings") or row.get("earnings_10yr")
+    earn_conf = row.get("earnings_confidence", "institution")
+    earn_str = fmt_usd(earn_val) if earn_val else "N/A"
+    earn_badge = earnings_confidence_html(earn_conf, lang) if earn_str != "N/A" else ""
+    earn_note = f" {earn_badge}" if earn_badge else ""
     grad_str = fmt_pct(row.get("completion_rate"))
     budget_text = row.get("budget_fit_text", "")
     budget_color = row.get("budget_fit_color", "#555")
@@ -494,7 +529,7 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
       </div>
       <div style="min-width:0;overflow:hidden;">
         <div style="font-size:0.72rem;color:#888;">
-          💼 {'10yr Earnings' if lang == 'en' else '10年後薪資'}
+          💼 {'Earnings' if lang == 'en' else '薪資'}
         </div>
         <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;word-break:break-word;">
           {earn_str}{earn_note}
@@ -815,4 +850,53 @@ demonstrated interest, and many other real factors admissions offices weigh.
         "- 同時缺少薪資和費用資料的學校會被排除（除非你開啟了「包含資料缺失學校」）\n"
         "- 結果限制在根據你的州別/類型偏好抓取的 200 所學校\n\n"
         "TODO：未來版本將加入 H-1B 贊助資料、完整費用計算機（含生活費）、申請截止日提醒、及 AI 顧問整合。"
+    )
+
+# ── Earnings Data Sources ─────────────────────────────────────────────────────
+st.markdown("---")
+with st.expander(
+    "ℹ️ About our earnings data — sources & confidence levels"
+    if lang == "en"
+    else "ℹ️ 薪資資料說明 — 來源與可信度"
+):
+    st.markdown(
+        """
+We use a **three-layer fallback system** to show the best available earnings estimate for each school:
+
+| Badge | Confidence | Source | What it means |
+|-------|-----------|--------|---------------|
+| 🟢 **Program data** | Highest | College Scorecard | Median earnings of graduates from *this specific program at this school*. Most accurate. |
+| 🟡 **National estimate** | Medium | ACS PUMS + Georgetown CEW | National median for Master's holders in this field across all schools. Not school-specific. |
+| 🟠 **Occupation-based** | Lower | BLS OEWS | Median salary for occupations linked to this field. Includes all education levels. |
+| 🔴 **School-wide** | Lowest | College Scorecard | Median earnings across *all* graduates of the school. Biased by engineering/CS if you're not in those fields. |
+
+**⚠️ Important caveats:**
+- 🟡 National estimates reflect the *average* Master's graduate. A top program (Harvard MBA, MIT CS)
+  will likely yield significantly higher earnings than the national median.
+- 🟠 BLS figures cover all degree levels — they typically *underestimate* Master's earnings for high-skill fields.
+- 🔴 School-wide earnings are only shown as a last resort and are flagged in red.
+
+**Data currency:** ACS figures estimated from 2023 data (Georgetown CEW, ACS 1-Year PUMS).
+Updated annually — see `data/masters_earnings_by_field.csv`.
+        """
+        if lang == "en"
+        else
+        """
+我們使用**三層備援系統**為每間學校顯示最佳的薪資估算：
+
+| 徽章 | 可信度 | 來源 | 代表意義 |
+|------|--------|------|---------|
+| 🟢 **課程資料** | 最高 | College Scorecard | 該校**特定課程**畢業生的薪資中位數，最準確。 |
+| 🟡 **全國估算** | 中等 | ACS PUMS + Georgetown CEW | 全國持該領域碩士學位者的薪資中位數，非特定學校。 |
+| 🟠 **職業薪資** | 較低 | BLS OEWS | 該領域典型職業的薪資中位數，涵蓋所有學歷。 |
+| 🔴 **學校整體** | 最低 | College Scorecard | 該校**所有科系**畢業生的整體薪資，若非工程/CS 領域會被高估。 |
+
+**⚠️ 重要說明：**
+- 🟡 全國估算反映的是*平均值*。頂尖課程（哈佛 MBA、MIT CS）的實際薪資通常遠高於全國中位數。
+- 🟠 BLS 數字涵蓋所有學歷，通常低估碩士畢業生在高技能領域的薪資。
+- 🔴 學校整體薪資僅作最後備選，會以紅色標示提醒。
+
+**資料時效：** ACS 數字根據 Georgetown CEW + ACS 1-Year PUMS 2023 資料估算，每年更新。
+詳見 `data/masters_earnings_by_field.csv`。
+        """
     )
