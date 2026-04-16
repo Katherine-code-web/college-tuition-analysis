@@ -399,7 +399,7 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
 
   <!-- Match score + admit prob -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-    <div style="background:#FFF8F0;border:1.5px solid #FFD166;border-radius:10px;padding:10px 12px;">
+    <div style="background:#FFF8F0;border:1.5px solid #FFD166;border-radius:10px;padding:10px 12px;min-width:0;overflow:hidden;">
       <div style="font-size:0.72rem;color:#888;margin-bottom:2px;">
         {'Match Score' if lang == 'en' else '配對分數'}
       </div>
@@ -408,11 +408,11 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
       </div>
       <div style="font-size:0.82rem;color:#FFB347;">{stars}</div>
     </div>
-    <div style="background:#F8F8FF;border:1.5px solid #C5C5F0;border-radius:10px;padding:10px 12px;">
+    <div style="background:#F8F8FF;border:1.5px solid #C5C5F0;border-radius:10px;padding:10px 12px;min-width:0;overflow:hidden;">
       <div style="font-size:0.72rem;color:#888;margin-bottom:2px;">
         {'Est. Admit' if lang == 'en' else '估算錄取率'}
       </div>
-      <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;color:#1A1A1A;line-height:1.2;">
+      <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:#1A1A1A;line-height:1.2;word-break:break-word;">
         {prob_str}
       </div>
     </div>
@@ -421,31 +421,31 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
   <!-- Key metrics -->
   <div style="border-top:1.5px dashed #E0E0E0;padding-top:12px;margin-bottom:12px;">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <div>
-        <div style="font-size:0.72rem;color:#888;">
+      <div style="min-width:0;overflow:hidden;">
+        <div style="font-size:0.72rem;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
           💰 {cost_label}
         </div>
-        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">{cost_str}</div>
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;word-break:break-word;">{cost_str}</div>
       </div>
-      <div>
+      <div style="min-width:0;overflow:hidden;">
         <div style="font-size:0.72rem;color:#888;">
           💼 {'10yr Earnings' if lang == 'en' else '10年後薪資'}
         </div>
-        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;word-break:break-word;">
           {earn_str}{earn_note}
         </div>
       </div>
-      <div>
+      <div style="min-width:0;overflow:hidden;">
         <div style="font-size:0.72rem;color:#888;">
           🎓 {'Grad Rate' if lang == 'en' else '畢業率'}
         </div>
         <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">{grad_str}</div>
       </div>
-      <div>
+      <div style="min-width:0;overflow:hidden;">
         <div style="font-size:0.72rem;color:#888;">
           📊 {'Budget fit' if lang == 'en' else '預算符合度'}
         </div>
-        <div style="font-size:0.85rem;font-weight:800;color:{budget_color};">{budget_text}</div>
+        <div style="font-size:0.82rem;font-weight:800;color:{budget_color};word-break:break-word;">{budget_text}</div>
       </div>
     </div>
   </div>
