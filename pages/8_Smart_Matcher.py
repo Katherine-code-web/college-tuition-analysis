@@ -297,7 +297,7 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
     prob_str = (
         f"~{admit_prob * 100:.0f}% (est.)"
         if admit_prob is not None
-        else "N/A (open / no data)"
+        else "N/A"
     )
 
     is_intl = effective_profile.get("nationality", "United States") != "United States"
@@ -309,164 +309,197 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
         else ("外州學費" if is_intl else "淨學費（助學金後）")
     )
 
-    # Show field-specific earnings if available, otherwise school-wide
     field_earn = row.get("field_earnings")
     has_field = row.get("has_target_field")
     if field_earn:
-        earn_str = f"{fmt_usd(field_earn)} <span style='font-size:0.72rem;color:#2E7D32;'>(your field)</span>"
+        earn_str = fmt_usd(field_earn)
+        earn_note = " <span style='color:#2E7D32;font-size:0.75rem;'>(your field)</span>"
     else:
         earn_str = fmt_usd(row.get("earnings_10yr"))
+        earn_note = ""
     grad_str = fmt_pct(row.get("completion_rate"))
     budget_text = row.get("budget_fit_text", "")
     budget_color = row.get("budget_fit_color", "#555")
-    field_tag = (
-        f'<span style="background:#DDFAE4;border:1.5px solid #6BCB77;border-radius:6px;'
-        f'padding:2px 7px;font-size:0.72rem;margin-right:4px;">✓ Offers your field</span>'
-        if has_field is True else (
-        f'<span style="background:#FFF3E8;border:1.5px solid #FF8C42;border-radius:6px;'
-        f'padding:2px 7px;font-size:0.72rem;margin-right:4px;">⚠️ Field data N/A</span>'
-        if has_field is False else ""
-        )
-    )
 
-    # Star rating bar for match score
-    filled = round(match_score / 2)  # 0-10 → 0-5 stars
+    field_tag = ""
+    if has_field is True:
+        field_tag = (
+            '<span style="background:#DDFAE4;border:1.5px solid #6BCB77;border-radius:20px;'
+            'padding:3px 10px;font-size:0.75rem;font-weight:800;">✓ Offers your field</span>'
+        )
+    elif has_field is False:
+        field_tag = (
+            '<span style="background:#FFF3E8;border:1.5px solid #FF8C42;border-radius:20px;'
+            'padding:3px 10px;font-size:0.75rem;font-weight:800;">⚠️ Field data N/A</span>'
+        )
+
+    filled = round(match_score / 2)
     stars = "★" * filled + "☆" * (5 - filled)
 
     url = row.get("url", "")
-    url_html = (
+    url_btn = (
         f'<a href="http://{url}" target="_blank" style="'
-        f'background:#4D96FF;color:white;border:2px solid #1A1A1A;border-radius:8px;'
-        f'padding:4px 10px;font-size:0.78rem;text-decoration:none;margin-right:6px;">'
-        f'{"View School" if lang == "en" else "查看學校"}</a>'
+        f'display:inline-block;background:#4D96FF;color:white;border:2px solid #1A1A1A;'
+        f'border-radius:8px;padding:6px 14px;font-size:0.82rem;font-weight:800;'
+        f'text-decoration:none;font-family:Fredoka One,cursive;">'
+        f'{"🔗 View School" if lang == "en" else "🔗 查看學校"}</a>'
         if url else ""
     )
 
     return f"""
-<div style="background:white;border:2.5px solid #1A1A1A;border-radius:14px;
-    box-shadow:4px 4px 0px #1A1A1A;padding:16px 18px;margin-bottom:12px;">
-
-  <div style="display:inline-block;background:{category_color};color:white;
-      font-size:0.72rem;font-weight:800;letter-spacing:1.5px;
-      border:2px solid #1A1A1A;border-radius:6px;padding:2px 8px;margin-bottom:6px;">
-    {category_label}
+<div style="
+    background: white;
+    border: 2.5px solid #1A1A1A;
+    border-radius: 16px;
+    box-shadow: 4px 4px 0px #1A1A1A;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+">
+  <!-- Category badge -->
+  <div style="margin-bottom: 10px;">
+    <span style="background:{category_color};color:white;font-size:0.72rem;font-weight:800;
+        letter-spacing:1.5px;border:2px solid #1A1A1A;border-radius:6px;
+        padding:3px 10px;">{category_label}</span>
   </div>
 
-  <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;
-      color:#1A1A1A;line-height:1.3;margin-bottom:2px;">{name}</div>
-  <div style="font-size:0.8rem;color:#666;margin-bottom:8px;">
-    {location} · {school_type}
+  <!-- School name + location -->
+  <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;
+      color:#1A1A1A;line-height:1.3;margin-bottom:4px;">{name}</div>
+  <div style="font-size:0.83rem;color:#777;margin-bottom:14px;">
+    📍 {location} &nbsp;·&nbsp; {school_type}
   </div>
 
-  <div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;">
-    <div>
-      <div style="font-size:0.72rem;color:#888;">Match Score</div>
-      <div style="font-family:'Fredoka One',cursive;font-size:1.2rem;color:#FF8C42;">
-        {match_score} / 10
-        <span style="font-size:0.85rem;color:#FFB347;">{stars}</span>
+  <!-- Match score + admit prob -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div style="background:#FFF8F0;border:1.5px solid #FFD166;border-radius:10px;padding:10px 12px;">
+      <div style="font-size:0.72rem;color:#888;margin-bottom:2px;">
+        {'Match Score' if lang == 'en' else '配對分數'}
+      </div>
+      <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:#FF8C42;line-height:1;">
+        {match_score} <span style="font-size:0.85rem;">/10</span>
+      </div>
+      <div style="font-size:0.82rem;color:#FFB347;">{stars}</div>
+    </div>
+    <div style="background:#F8F8FF;border:1.5px solid #C5C5F0;border-radius:10px;padding:10px 12px;">
+      <div style="font-size:0.72rem;color:#888;margin-bottom:2px;">
+        {'Est. Admit' if lang == 'en' else '估算錄取率'}
+      </div>
+      <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;color:#1A1A1A;line-height:1.2;">
+        {prob_str}
       </div>
     </div>
-    <div>
-      <div style="font-size:0.72rem;color:#888;">{"Est. Admit" if lang == "en" else "估算錄取率"}</div>
-      <div style="font-weight:800;font-size:0.92rem;">{prob_str}</div>
+  </div>
+
+  <!-- Key metrics -->
+  <div style="border-top:1.5px dashed #E0E0E0;padding-top:12px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div>
+        <div style="font-size:0.72rem;color:#888;">
+          💰 {cost_label}
+        </div>
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">{cost_str}</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#888;">
+          💼 {'10yr Earnings' if lang == 'en' else '10年後薪資'}
+        </div>
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">
+          {earn_str}{earn_note}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#888;">
+          🎓 {'Grad Rate' if lang == 'en' else '畢業率'}
+        </div>
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">{grad_str}</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#888;">
+          📊 {'Budget fit' if lang == 'en' else '預算符合度'}
+        </div>
+        <div style="font-size:0.85rem;font-weight:800;color:{budget_color};">{budget_text}</div>
+      </div>
     </div>
   </div>
 
-  <div style="font-size:0.82rem;margin-bottom:4px;">
-    💰 <b>{cost_label}:</b> {cost_str}
+  <!-- Field tag + link -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div>{field_tag}</div>
+    <div>{url_btn}</div>
   </div>
-  <div style="font-size:0.82rem;margin-bottom:4px;">
-    💼 <b>{"10yr Earnings" if lang == "en" else "10年後薪資"}:</b> {earn_str}
-  </div>
-  <div style="font-size:0.82rem;margin-bottom:8px;">
-    🎓 <b>{"Grad Rate" if lang == "en" else "畢業率"}:</b> {grad_str}
-  </div>
-
-  <div style="font-size:0.82rem;font-weight:800;color:{budget_color};margin-bottom:6px;">
-    {budget_text}
-  </div>
-  <div style="margin-bottom:10px;">{field_tag}</div>
-
-  <div>{url_html}</div>
 </div>
 """
 
 
-def render_category_column(category_df, label, color, empty_msg):
+def render_cards_2col(category_df, label, color, empty_msg):
+    """Render school cards in a 2-column grid within a tab."""
     if category_df.empty:
-        st.caption(empty_msg)
+        st.info(empty_msg)
         return
-    for _, row in category_df.iterrows():
-        st.markdown(school_card(row.to_dict(), label, color), unsafe_allow_html=True)
+    rows_list = [row.to_dict() for _, row in category_df.iterrows()]
+    # Pair up cards into rows of 2
+    for i in range(0, len(rows_list), 2):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(school_card(rows_list[i], label, color), unsafe_allow_html=True)
+        with c2:
+            if i + 1 < len(rows_list):
+                st.markdown(school_card(rows_list[i + 1], label, color), unsafe_allow_html=True)
 
 
-# ── Three-Column Display ───────────────────────────────────────────────────────
+# ── Tabs: Reach / Target / Safety ─────────────────────────────────────────────
 st.markdown("---")
 
-col_reach, col_target, col_safety = st.columns(3)
+tab_reach, tab_target, tab_safety = st.tabs([
+    f"🎯 Reach  ({len(reach_df)})" if lang == "en" else f"🎯 挑戰型 ({len(reach_df)})",
+    f"✓ Target  ({len(target_df)})" if lang == "en" else f"✓ 目標型 ({len(target_df)})",
+    f"🛡️ Safety  ({len(safety_df)})" if lang == "en" else f"🛡️ 保底型 ({len(safety_df)})",
+])
 
-with col_reach:
-    st.markdown(
-        f'<div style="background:#E8503A;color:white;border:2.5px solid #1A1A1A;'
-        f'border-radius:10px;padding:8px 14px;font-family:Fredoka One,cursive;'
-        f'font-size:1.1rem;margin-bottom:12px;">🎯 Reach Schools ({len(reach_df)})</div>',
-        unsafe_allow_html=True,
-    )
+with tab_reach:
     st.caption(
-        "High ambition — low admit probability but strong match."
+        "Low admit probability — stretch yourself. These schools are worth applying if your match score is strong."
         if lang == "en"
-        else "挑戰型 — 錄取機率較低，但條件契合度高。"
+        else "錄取機率較低的挑戰型學校。如果配對分數高，仍值得申請。"
     )
-    render_category_column(
+    render_cards_2col(
         reach_df, "🎯 REACH", "#E8503A",
-        "No reach schools found with current filters."
-        if lang == "en" else "目前篩選條件下沒有挑戰型學校。",
+        "No reach schools found. Try removing state/type filters."
+        if lang == "en" else "找不到挑戰型學校，試試移除州別/類型篩選。",
     )
 
-with col_target:
-    st.markdown(
-        f'<div style="background:#FF8C42;color:white;border:2.5px solid #1A1A1A;'
-        f'border-radius:10px;padding:8px 14px;font-family:Fredoka One,cursive;'
-        f'font-size:1.1rem;margin-bottom:12px;">✓ Target Schools ({len(target_df)})</div>',
-        unsafe_allow_html=True,
-    )
+with tab_target:
     st.caption(
-        "Balanced — realistic admit chance, good overall fit."
+        "Realistic admit chance with good overall fit — your primary application list."
         if lang == "en"
-        else "目標型 — 錄取機率合理，整體條件相符。"
+        else "錄取機率合理、整體條件相符的目標學校 — 主要申請名單。"
     )
-    render_category_column(
+    render_cards_2col(
         target_df, "✓ TARGET", "#FF8C42",
-        "No target schools found with current filters."
-        if lang == "en" else "目前篩選條件下沒有目標型學校。",
+        "No target schools found. Try removing state/type filters."
+        if lang == "en" else "找不到目標型學校，試試移除州別/類型篩選。",
     )
 
-with col_safety:
-    st.markdown(
-        f'<div style="background:#6BCB77;color:white;border:2.5px solid #1A1A1A;'
-        f'border-radius:10px;padding:8px 14px;font-family:Fredoka One,cursive;'
-        f'font-size:1.1rem;margin-bottom:12px;">🛡️ Safety Schools ({len(safety_df)})</div>',
-        unsafe_allow_html=True,
-    )
+with tab_safety:
     st.caption(
-        "Likely admit — strong acceptance probability."
+        "High likelihood of admission — include at least 2–3 safety schools in your list."
         if lang == "en"
-        else "保底型 — 錄取機率高，建議作為保底選項。"
+        else "錄取機率高的保底學校 — 建議申請清單中至少包含 2–3 所。"
     )
-    render_category_column(
+    render_cards_2col(
         safety_df, "🛡️ SAFETY", "#6BCB77",
-        "No safety schools found with current filters."
-        if lang == "en" else "目前篩選條件下沒有保底型學校。",
+        "No safety schools found. Try removing state/type filters."
+        if lang == "en" else "找不到保底型學校，試試移除州別/類型篩選。",
     )
 
-# Show "Unknown" schools if any (no admission data)
+# Unknown category (schools with no admission data)
 if not unknown_df.empty:
     with st.expander(
-        f"❓ Schools with no admission data ({len(unknown_df)})"
+        f"❓ {len(unknown_df)} schools with no admission data"
         if lang == "en"
-        else f"❓ 無錄取率資料的學校（{len(unknown_df)} 所）"
+        else f"❓ {len(unknown_df)} 所無錄取率資料的學校"
     ):
-        render_category_column(unknown_df, "❓ UNKNOWN", "#9E9E9E", "")
+        render_cards_2col(unknown_df, "❓ UNKNOWN", "#9E9E9E", "")
 
 # ── Full Ranked List ───────────────────────────────────────────────────────────
 st.markdown("---")
