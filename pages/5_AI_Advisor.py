@@ -150,7 +150,7 @@ def extract_school_names(text: str) -> list[str]:
         f"\nText: {text}\n\nReturn only the JSON array, nothing else."
     )
     try:
-        flash_model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        flash_model = genai.GenerativeModel("gemini-2.5-flash-preview-04-17")
         resp = flash_model.generate_content(extraction_prompt)
         raw = resp.text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -308,7 +308,7 @@ for m in st.session_state.messages[-12:][:-1]:  # all except the last user messa
     gemini_history.append({"role": gemini_role, "parts": [m["content"]]})
 
 advisor_model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash-lite",
+    model_name="gemini-2.5-flash-preview-04-17",
     system_instruction=system_prompt,
     generation_config=genai.GenerationConfig(max_output_tokens=1200),
 )
