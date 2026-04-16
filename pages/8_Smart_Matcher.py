@@ -232,15 +232,23 @@ if cip_prefix:
         for school_id in candidate_ids:
             try:
                 programs = get_school_programs(school_id)
-                matching = [
+                # All programs in this CIP category (regardless of earnings)
+                cip_programs = [
                     p for p in programs
                     if str(p.get("cip_code", ""))[:2] == cip_prefix
-                    and p.get("median_earnings")
                 ]
-                if matching:
-                    field_earn_map[school_id] = max(p["median_earnings"] for p in matching)
+                # Subset that also have earnings data
+                with_earnings = [p for p in cip_programs if p.get("median_earnings")]
+                if with_earnings:
+                    # School offers field AND has earnings data
+                    field_earn_map[school_id] = max(p["median_earnings"] for p in with_earnings)
                     field_present_map[school_id] = True
+                elif cip_programs:
+                    # School offers field but earnings are suppressed (e.g. Harvard MBA)
+                    # Use None so it gets no penalty — it does have the program
+                    field_present_map[school_id] = None
                 else:
+                    # School genuinely doesn't offer this field
                     field_present_map[school_id] = False
             except Exception:
                 pass
@@ -262,14 +270,31 @@ safety_df = df[df["admit_category"] == "Safety"].head(5)
 unknown_df = df[df["admit_category"] == "Unknown"].head(3)
 
 field_label = field_override if lang == "en" else field_override
-n_with_field = int(df["has_target_field"].sum()) if "has_target_field" in df.columns else len(df)
-st.markdown(
-    f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs."
-    if lang == "en"
-    else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系。"
-)
+if "has_target_field" in df.columns:
+    # Count True (has field + earnings) and None (has field, earnings suppressed)
+    n_with_field = int((df["has_target_field"] == True).sum() + df["has_target_field"].isna().sum())  # noqa: E712
+    n_with_earnings = int((df["has_target_field"] == True).sum())  # noqa: E712
+else:
+    n_with_field = len(df)
+    n_with_earnings = len(df)
 
-# Show credential hint if no field data found
+if n_with_earnings < n_with_field:
+    # Some schools have the program but earnings are suppressed (e.g. top MBA programs)
+    st.markdown(
+        f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs "
+        f"({n_with_earnings} have earnings data, {n_with_field - n_with_earnings} have suppressed data)."
+        if lang == "en"
+        else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系"
+             f"（{n_with_earnings} 所有薪資資料，{n_with_field - n_with_earnings} 所資料被隱藏）。"
+    )
+else:
+    st.markdown(
+        f"**{len(df)} schools scored** — {n_with_field} offer **{field_label}** programs."
+        if lang == "en"
+        else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系。"
+    )
+
+# Show credential hint only when NO school at all offers the field
 if cip_prefix and "has_target_field" in df.columns and n_with_field == 0:
     hint = get_field_hint(cip_prefix, lang)
     if hint:
@@ -324,10 +349,16 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
             '<span style="background:#DDFAE4;border:1.5px solid #6BCB77;border-radius:20px;'
             'padding:3px 10px;font-size:0.75rem;font-weight:800;">✓ Offers your field</span>'
         )
+    elif has_field is None and cip_prefix:
+        # School has the program but earnings are suppressed (e.g. elite MBA programs)
+        field_tag = (
+            '<span style="background:#EEF2FF;border:1.5px solid #7B8CE4;border-radius:20px;'
+            'padding:3px 10px;font-size:0.75rem;font-weight:800;">📊 Field earnings suppressed</span>'
+        )
     elif has_field is False:
         field_tag = (
             '<span style="background:#FFF3E8;border:1.5px solid #FF8C42;border-radius:20px;'
-            'padding:3px 10px;font-size:0.75rem;font-weight:800;">⚠️ Field data N/A</span>'
+            'padding:3px 10px;font-size:0.75rem;font-weight:800;">⚠️ Field not offered</span>'
         )
 
     filled = round(match_score / 2)
