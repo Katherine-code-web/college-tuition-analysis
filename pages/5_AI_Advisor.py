@@ -9,7 +9,8 @@ import json
 import pandas as pd
 import streamlit as st
 from utils.theme import get_theme_css
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from utils.api import search_schools, results_to_df, fmt_usd, fmt_pct, SCHOOL_ALIASES, get_school_programs
 from utils.calculations import enrich_df, score_label, debt_label, programs_to_df, CRED_LEVEL_MAP
@@ -34,7 +35,7 @@ if not gemini_key:
     )
     st.stop()
 
-genai.configure(api_key=gemini_key)
+gemini_client = genai.Client(api_key=gemini_key)
 
 # ── Theme CSS ─────────────────────────────────────────────────────────────────
 st.markdown(f"""
@@ -150,8 +151,10 @@ def extract_school_names(text: str) -> list[str]:
         f"\nText: {text}\n\nReturn only the JSON array, nothing else."
     )
     try:
-        flash_model = genai.GenerativeModel("gemini-2.5-flash-preview-04-17")
-        resp = flash_model.generate_content(extraction_prompt)
+        resp = gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-04-17",
+            contents=extraction_prompt,
+        )
         raw = resp.text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw).strip()
@@ -301,26 +304,29 @@ KEY METRICS EXPLAINED:
 """
 
 # ── Stream Gemini response ────────────────────────────────────────────────────
-# Convert message history to Gemini format (role: "user"/"model", parts: [text])
+# Convert message history to new SDK format
 gemini_history = []
 for m in st.session_state.messages[-12:][:-1]:  # all except the last user message
     gemini_role = "model" if m["role"] == "assistant" else "user"
-    gemini_history.append({"role": gemini_role, "parts": [m["content"]]})
+    gemini_history.append(
+        types.Content(role=gemini_role, parts=[types.Part(text=m["content"])])
+    )
 
-advisor_model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash-preview-04-17",
-    system_instruction=system_prompt,
-    generation_config=genai.GenerationConfig(max_output_tokens=1200),
+chat_session = gemini_client.chats.create(
+    model="gemini-2.5-flash-preview-04-17",
+    config=types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        max_output_tokens=1200,
+    ),
+    history=gemini_history,
 )
-
-chat_session = advisor_model.start_chat(history=gemini_history)
 
 with st.chat_message("assistant", avatar=adv["emoji"]):
     response_placeholder = st.empty()
     full_response = ""
 
     try:
-        stream = chat_session.send_message(user_input, stream=True)
+        stream = chat_session.send_message_stream(user_input)
         for chunk in stream:
             if chunk.text:
                 full_response += chunk.text
