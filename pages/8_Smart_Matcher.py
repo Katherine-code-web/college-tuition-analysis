@@ -1,6 +1,6 @@
 """
 Page 8 — Smart School Matcher
-Personalized Reach / Target / Safety school recommendations based on user profile.
+Personalized Reach / Target / Safety / Stretch school recommendations based on user profile.
 """
 
 import streamlit as st
@@ -229,7 +229,35 @@ elif target_degree_val == "Bachelor's":
 # ── Budget hard cap: exclude schools > budget × 1.2 ──────────────────────────
 _budget = budget_override or 50000
 _is_intl = effective_profile.get("nationality", "United States") != "United States"
-df["effective_price"] = df["tuition_out"].fillna(df["net_price"]) if _is_intl else df["net_price"]
+
+# COA resolution priority per spec:
+# 1. International + public → tuition_out (COSTT4_OOS proxy)
+# 2. International + private → tuition_out or net_price (COSTT4_A proxy)
+# 3. Residency unknown → default to international logic
+# 4. Missing COA → fall back to tuition_out + 18000 or net_price
+def _resolve_coa(row: "pd.Series", is_intl: bool) -> "float | None":
+    """Resolve Cost of Attendance from available fields."""
+    if is_intl:
+        coa = row.get("tuition_out")
+        if pd.notna(coa) and coa:
+            return float(coa)
+        # Fall back to net_price (includes living costs at some schools)
+        np_ = row.get("net_price")
+        if pd.notna(np_) and np_:
+            return float(np_)
+        return None
+    else:
+        np_ = row.get("net_price")
+        if pd.notna(np_) and np_:
+            return float(np_)
+        return None
+
+df["effective_price"] = df.apply(lambda r: _resolve_coa(r, _is_intl), axis=1)
+
+# Capture schools ABOVE budget × 1.2 before dropping them (for Stretch tab + banner)
+_over_budget_mask = df["effective_price"].notna() & (df["effective_price"] > _budget * 1.2)
+_over_budget_df = df[_over_budget_mask].copy()
+
 # Keep schools that either have no price data OR are within 1.2× budget
 _within_budget = df["effective_price"].isna() | (df["effective_price"] <= _budget * 1.2)
 df = df[_within_budget].copy()
@@ -394,11 +422,112 @@ if "field_earnings" in df.columns and "display_earnings" in df.columns:
 df = score_schools_df(effective_profile, df)
 df = df.sort_values("match_score", ascending=False).reset_index(drop=True)
 
+# ── Score over-budget schools for Stretch tab ─────────────────────────────────
+# Apply same field earnings / reputation to the over-budget df before scoring
+if not _over_budget_df.empty:
+    if cip_prefix and "field_earnings" in df.columns:
+        _over_budget_df["field_earnings"] = _over_budget_df["id"].apply(
+            lambda x: field_earn_map.get(int(x)) if pd.notna(x) else None
+        )
+        _over_budget_df["has_target_field"] = _over_budget_df["id"].apply(
+            lambda x: field_present_map.get(int(x)) if pd.notna(x) else None
+        )
+        _over_budget_df["field_size"] = _over_budget_df["id"].apply(
+            lambda x: field_size_map.get(int(x), 0) if pd.notna(x) else 0
+        )
+        # Apply fallback earnings to over-budget df
+        _ob_earn_vals, _ob_earn_confs = zip(*[_resolve_earnings(row) for _, row in _over_budget_df.iterrows()]) if not _over_budget_df.empty else ([], [])
+        _over_budget_df["display_earnings"] = list(_ob_earn_vals)
+        _over_budget_df["earnings_confidence"] = list(_ob_earn_confs)
+        use_fallback_ob = _over_budget_df["earnings_confidence"].isin(["program", "field_national", "occupation"])
+        _over_budget_df["field_earnings"] = _over_budget_df["field_earnings"].fillna(
+            _over_budget_df["display_earnings"].where(use_fallback_ob)
+        )
+    if cip_prefix and target_degree_val in _GRAD_DEGREES and "reputation_bonus" in df.columns:
+        _over_budget_df["reputation_bonus"] = _over_budget_df["id"].apply(
+            lambda x: get_reputation_score(cip_prefix, target_degree_val, int(x))
+            if pd.notna(x) else None
+        )
+    _over_budget_df = enrich_df(_over_budget_df)
+    _over_budget_df = score_schools_df(effective_profile, _over_budget_df)
+    _over_budget_df = _over_budget_df.sort_values("match_score", ascending=False).reset_index(drop=True)
+
+# ── Build Stretch candidates ───────────────────────────────────────────────────
+# Stretch: excluded by budget, but COA <= budget × 1.8
+# Note: SCH_AVG_INST_AID / PCT_INST_AID not in current data pipeline;
+# use pell_rate as proxy for pct_receiving_aid.
+# avg_institutional_aid is not available — see CHANGES.md.
+# Stretch filter uses only fields available: match_score >= 7.0 + COA range.
+_stretch_df = pd.DataFrame()
+_n_suppressed_aid = 0
+if not _over_budget_df.empty:
+    _ob = _over_budget_df.copy()
+    # COA <= budget × 1.8
+    _ob_feasible = _ob[_ob["effective_price"] <= _budget * 1.8].copy()
+    # match_score >= 7.0
+    if "match_score" in _ob_feasible.columns:
+        _ob_feasible = _ob_feasible[_ob_feasible["match_score"] >= 7.0]
+    # pell_rate >= 0.3 as proxy for pct_receiving_aid
+    if "pell_rate" in _ob_feasible.columns:
+        _ob_feasible = _ob_feasible[
+            _ob_feasible["pell_rate"].isna() | (_ob_feasible["pell_rate"] >= 0.3)
+        ]
+    # Count suppressed aid (pell_rate null = aid data unavailable)
+    _n_suppressed_aid = int(_ob_feasible["pell_rate"].isna().sum())
+    # Sub-tiering
+    def _stretch_tier(coa, budget):
+        if coa <= budget * 1.3:
+            return 1
+        return 2
+    if not _ob_feasible.empty:
+        _ob_feasible["stretch_tier"] = _ob_feasible["effective_price"].apply(
+            lambda c: _stretch_tier(c, _budget)
+        )
+        _ob_feasible["realistic_net_cost"] = _ob_feasible["effective_price"].apply(
+            lambda c: c  # no avg_inst_aid available; net cost = sticker price
+        )
+        _ob_feasible["budget_gap"] = _ob_feasible["effective_price"] - _budget
+        # Sort: tier first, then match_score descending
+        _stretch_df = _ob_feasible.sort_values(
+            ["stretch_tier", "match_score"], ascending=[True, False]
+        ).reset_index(drop=True)
+
+# ── Log excluded schools to session state ─────────────────────────────────────
+st.session_state["excluded_by_budget"] = (
+    _over_budget_df[["id", "name", "effective_price", "match_score"]].to_dict("records")
+    if not _over_budget_df.empty else []
+)
+
 # Split into categories
 reach_df = df[df["admit_category"] == "Reach"].head(5)
 target_df = df[df["admit_category"] == "Target"].head(5)
 safety_df = df[df["admit_category"] == "Safety"].head(5)
 unknown_df = df[df["admit_category"] == "Unknown"].head(3)
+
+# ── Excluded-schools banner ────────────────────────────────────────────────────
+_n_excluded = len(_over_budget_df) if not _over_budget_df.empty else 0
+if _n_excluded > 0:
+    # Top 3 excluded by match score
+    _top_excluded_names = (
+        _over_budget_df.nlargest(3, "match_score")["name"].tolist()
+        if "match_score" in _over_budget_df.columns
+        else _over_budget_df.head(3)["name"].tolist()
+    )
+    _top_names_str = ", ".join(_top_excluded_names) if _top_excluded_names else "N/A"
+    _stretch_count = len(_stretch_df) if not _stretch_df.empty else 0
+    st.warning(
+        f"**{_n_excluded} school{'s' if _n_excluded != 1 else ''} excluded** by your "
+        f"**${_budget:,}/yr** budget — including {_top_names_str}. "
+        + (f"See the **Stretch** tab below for {_stretch_count} school{'s' if _stretch_count != 1 else ''} where scholarships may close the gap."
+           if _stretch_count > 0
+           else "None qualify for the Stretch tab (aid data suppressed or cost too high).")
+        if lang == "en"
+        else
+        f"**{_n_excluded} 所學校** 因超出你的 **${_budget:,}/yr** 預算而被排除 — 包含 {_top_names_str}。"
+        + (f"請查看下方 **Stretch** 標籤，了解 {_stretch_count} 所可能透過獎學金彌補差距的學校。"
+           if _stretch_count > 0
+           else "無符合 Stretch 標籤條件的學校（助學金資料被隱藏或費用過高）。")
+    )
 
 field_label = field_override if lang == "en" else field_override
 if "has_target_field" in df.columns:
@@ -458,6 +587,58 @@ else:
         if lang == "en"
         else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系。"
     )
+
+# ── "Field earnings suppressed" explainer expander ─────────────────────────────
+if n_suppressed > 0:
+    with st.expander(
+        "📊 Why do some schools show 'Field earnings suppressed'?"
+        if lang == "en"
+        else "📊 為什麼某些學校顯示「科系薪資被隱藏」？"
+    ):
+        st.markdown(
+            """
+**"Field earnings suppressed"** means the U.S. Department of Education has withheld
+program-level earnings data for that school and field combination.
+
+**Why does this happen?**
+The Department suppresses earnings data when a cohort has **fewer than 30 graduates**
+in a reporting period — this is a **federal privacy protection** to prevent
+identifying individual students from small groups.
+
+**What does it mean for you?**
+- The school *does* offer your target field/program
+- There just aren't enough recent graduates for the government to publish a median salary
+- This is common at elite programs (e.g. Harvard MBA, Stanford GSB) where cohort
+  reporting categories can be narrow
+- It does **not** mean the program has poor earnings — often the opposite
+
+**What we do instead:**
+- Match scores in grad mode use **program reputation** as the primary quality signal
+- Earnings shown are institution-wide medians (a fallback, labeled accordingly)
+- You can find program-specific salary data at: U.S. News, Bloomberg Businessweek,
+  Poets & Quants, or each school's employment report
+            """
+            if lang == "en"
+            else
+            """
+**「科系薪資被隱藏」** 代表美國教育部已隱藏該校在特定科系的課程薪資資料。
+
+**為什麼會發生？**
+教育部會隱藏特定期間內**畢業生人數少於 30 人**的課程薪資資料 — 這是**聯邦隱私保護**措施，
+防止從小群體中識別出個別學生。
+
+**對你代表什麼？**
+- 該校*確實*提供你的目標科系/課程
+- 只是近期畢業生不足，政府無法公布薪資中位數
+- 這在頂尖課程（如哈佛 MBA、史丹佛 GSB）很常見
+- 這**不**代表該課程薪資差，往往恰恰相反
+
+**我們的替代方案：**
+- 研究所模式下，配對分數以**課程聲望**為主要品質指標
+- 顯示的薪資為學校整體中位數（備援資料，有標示說明）
+- 你可以在以下資源查詢課程特定薪資：U.S. News、彭博商業周刊、Poets & Quants 或各校就業報告
+            """
+        )
 
 # Credential hint — only when no school offers the field at all (not just suppressed)
 if cip_prefix and "has_target_field" in df.columns and n_with_field == 0 and n_suppressed == 0:
@@ -640,13 +821,166 @@ def render_cards_2col(category_df, label, color, empty_msg):
                 st.markdown(school_card(rows_list[i + 1], label, color), unsafe_allow_html=True)
 
 
-# ── Tabs: Reach / Target / Safety ─────────────────────────────────────────────
+# ── Stretch card helper ────────────────────────────────────────────────────────
+def stretch_card(row: dict) -> str:
+    """Return HTML for a single Stretch school card."""
+    name = row.get("name", "Unknown")
+    location = f"{row.get('city', '')}, {row.get('state', '')}"
+    school_type = row.get("type_en", "")
+    match_score = row.get("match_score", 0)
+    coa = row.get("effective_price", 0) or 0
+    budget_gap = row.get("budget_gap", 0) or 0
+    tier = row.get("stretch_tier", 2)
+    pell = row.get("pell_rate")
+
+    if tier == 1:
+        tier_label = "NEGOTIABLE GAP"
+        tier_color = "#6BCB77"
+        tier_bg = "#DDFAE4"
+        tier_border = "#6BCB77"
+    else:
+        tier_label = "AGGRESSIVE STRETCH"
+        tier_color = "#F4A261"
+        tier_bg = "#FFF8E8"
+        tier_border = "#F4A261"
+
+    coa_str = fmt_usd(coa)
+    gap_str = fmt_usd(budget_gap)
+    pell_str = f"{pell * 100:.0f}%" if pell is not None else "N/A"
+
+    # Aid note: avg_institutional_aid not in pipeline
+    aid_note = (
+        "<span style='font-size:0.75rem;color:#888;'>"
+        "Avg. institutional aid: <em>data unavailable</em> — see CHANGES.md</span>"
+    )
+
+    filled = round(match_score / 2)
+    stars = "★" * filled + "☆" * (5 - filled)
+
+    url = row.get("url", "")
+    url_btn = (
+        f'<a href="http://{url}" target="_blank" style="'
+        f'display:inline-block;background:#4D96FF;color:white;border:2px solid #1A1A1A;'
+        f'border-radius:8px;padding:6px 14px;font-size:0.82rem;font-weight:800;'
+        f'text-decoration:none;font-family:Fredoka One,cursive;">'
+        f'{"🔗 View School" if lang == "en" else "🔗 查看學校"}</a>'
+        if url else ""
+    )
+
+    return f"""
+<div style="
+    background: white;
+    border: 2.5px solid #1A1A1A;
+    border-radius: 16px;
+    box-shadow: 4px 4px 0px #1A1A1A;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+">
+  <!-- Tier badge -->
+  <div style="margin-bottom: 10px;display:flex;gap:8px;flex-wrap:wrap;">
+    <span style="background:{tier_color};color:white;font-size:0.72rem;font-weight:800;
+        letter-spacing:1.5px;border:2px solid #1A1A1A;border-radius:6px;
+        padding:3px 10px;">💰 STRETCH</span>
+    <span style="background:{tier_bg};color:{tier_color};font-size:0.72rem;font-weight:800;
+        letter-spacing:1px;border:2px solid {tier_border};border-radius:6px;
+        padding:3px 10px;">{tier_label}</span>
+  </div>
+
+  <!-- School name + location -->
+  <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;
+      color:#1A1A1A;line-height:1.3;margin-bottom:4px;
+      word-break:break-word;overflow-wrap:anywhere;">{name}</div>
+  <div style="font-size:0.83rem;color:#777;margin-bottom:14px;
+      word-break:break-word;overflow-wrap:anywhere;">
+    📍 {location} &nbsp;·&nbsp; {school_type}
+  </div>
+
+  <!-- Match score -->
+  <div style="background:#FFF8F0;border:1.5px solid #FFD166;border-radius:10px;
+      padding:10px 12px;margin-bottom:14px;display:inline-block;">
+    <div style="font-size:0.72rem;color:#888;margin-bottom:2px;">
+      {'Match Score' if lang == 'en' else '配對分數'}
+    </div>
+    <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:#FF8C42;line-height:1;">
+      {match_score} <span style="font-size:0.85rem;">/10</span>
+    </div>
+    <div style="font-size:0.82rem;color:#FFB347;">{stars}</div>
+  </div>
+
+  <!-- Financial breakdown -->
+  <div style="border-top:1.5px dashed #E0E0E0;padding-top:12px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div>
+        <div style="font-size:0.72rem;color:#888;">💸 Sticker Price (COA)</div>
+        <div style="font-size:0.92rem;font-weight:800;color:#B71C1C;">{coa_str}</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#888;">🎓 % Receiving Aid (Pell proxy)</div>
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">{pell_str}</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#888;">⚠️ Need to Negotiate / Self-fund</div>
+        <div style="font-size:0.92rem;font-weight:800;color:#E65100;">{gap_str}/yr</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#888;">📊 Avg Institutional Aid</div>
+        {aid_note}
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div>{url_btn}</div>
+  </div>
+</div>
+"""
+
+
+def render_stretch_cards_2col(stretch_df_arg):
+    """Render stretch school cards in a 2-column grid."""
+    rows_list = [row.to_dict() for _, row in stretch_df_arg.iterrows()]
+    for i in range(0, len(rows_list), 2):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(stretch_card(rows_list[i]), unsafe_allow_html=True)
+            # Plan Negotiation button
+            school_data = rows_list[i]
+            if st.button(
+                f"💬 Plan Negotiation for {school_data.get('name','')[:30]}",
+                key=f"stretch_neg_{i}",
+            ):
+                st.session_state["negotiator_prefill"] = {
+                    "name": school_data.get("name", ""),
+                    "cost": school_data.get("effective_price", 0),
+                    "match_score": school_data.get("match_score", 0),
+                }
+                st.switch_page("pages/09_Scholarship_Negotiator.py")
+        with c2:
+            if i + 1 < len(rows_list):
+                school_data2 = rows_list[i + 1]
+                st.markdown(stretch_card(school_data2), unsafe_allow_html=True)
+                if st.button(
+                    f"💬 Plan Negotiation for {school_data2.get('name','')[:30]}",
+                    key=f"stretch_neg_{i+1}",
+                ):
+                    st.session_state["negotiator_prefill"] = {
+                        "name": school_data2.get("name", ""),
+                        "cost": school_data2.get("effective_price", 0),
+                        "match_score": school_data2.get("match_score", 0),
+                    }
+                    st.switch_page("pages/09_Scholarship_Negotiator.py")
+
+
+# ── Tabs: Reach / Target / Safety / Stretch ───────────────────────────────────
 st.markdown("---")
 
-tab_reach, tab_target, tab_safety = st.tabs([
+_stretch_count_tab = len(_stretch_df) if not _stretch_df.empty else 0
+tab_reach, tab_target, tab_safety, tab_stretch = st.tabs([
     f"🎯 Reach  ({len(reach_df)})" if lang == "en" else f"🎯 挑戰型 ({len(reach_df)})",
     f"✓ Target  ({len(target_df)})" if lang == "en" else f"✓ 目標型 ({len(target_df)})",
     f"🛡️ Safety  ({len(safety_df)})" if lang == "en" else f"🛡️ 保底型 ({len(safety_df)})",
+    f"💰 Stretch  ({_stretch_count_tab})" if lang == "en" else f"💰 拉伸型 ({_stretch_count_tab})",
 ])
 
 with tab_reach:
@@ -684,6 +1018,56 @@ with tab_safety:
         "No safety schools found. Try removing state/type filters."
         if lang == "en" else "找不到保底型學校，試試移除州別/類型篩選。",
     )
+
+with tab_stretch:
+    st.caption(
+        "Schools above your budget that may be bridgeable with institutional aid. "
+        "**Stretch is independent of Reach/Target/Safety** — it's about financial feasibility, not admission odds."
+        if lang == "en"
+        else "超出預算但可能透過助學金彌補差距的學校。"
+        "**Stretch 與挑戰/目標/保底分類無關** — 這是財務可行性評估，與錄取機率分開。"
+    )
+    st.info(
+        "⚠️ **Disclaimer:** Aid figures shown (Pell grant rate) are institution-wide averages. "
+        "Actual aid for your specific program may differ significantly. "
+        "Institutional grant aid averages are not yet in our data pipeline — see CHANGES.md."
+        if lang == "en"
+        else "⚠️ **免責聲明：** 顯示的助學金比例（Pell 補助率）為學校整體平均值，"
+        "你實際科系的助學金金額可能差異很大。機構助學金平均值尚未納入資料流程，詳見 CHANGES.md。"
+    )
+    if _n_suppressed_aid > 0:
+        st.warning(
+            f"ℹ️ {_n_suppressed_aid} schools had suppressed/missing aid data and cannot be fully scored for Stretch."
+            if lang == "en"
+            else f"ℹ️ {_n_suppressed_aid} 所學校的助學金資料被隱藏或缺失，無法完整評估 Stretch 條件。"
+        )
+    if _stretch_df.empty:
+        st.info(
+            "No schools qualify for Stretch with your current budget and filters. "
+            "Stretch schools must have: match score ≥ 7.0, cost ≤ budget × 1.8, and Pell aid rate ≥ 30%."
+            if lang == "en"
+            else "目前預算與篩選條件下無符合 Stretch 的學校。"
+            "Stretch 需滿足：配對分數 ≥ 7.0、費用 ≤ 預算 × 1.8、Pell 補助率 ≥ 30%。"
+        )
+    else:
+        # Tier 1
+        tier1 = _stretch_df[_stretch_df["stretch_tier"] == 1]
+        if not tier1.empty:
+            st.markdown(
+                "#### 🟢 Tier 1 — Negotiable Gap (COA ≤ budget × 1.3)"
+                if lang == "en"
+                else "#### 🟢 第一層 — 可協商差距（費用 ≤ 預算 × 1.3）"
+            )
+            render_stretch_cards_2col(tier1)
+        # Tier 2
+        tier2 = _stretch_df[_stretch_df["stretch_tier"] == 2]
+        if not tier2.empty:
+            st.markdown(
+                "#### 🟡 Tier 2 — Aggressive Stretch (COA 1.3×–1.8× budget)"
+                if lang == "en"
+                else "#### 🟡 第二層 — 積極拉伸（費用為預算 1.3×–1.8×）"
+            )
+            render_stretch_cards_2col(tier2)
 
 # Unknown category (schools with no admission data)
 if not unknown_df.empty:
