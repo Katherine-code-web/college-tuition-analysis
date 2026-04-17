@@ -351,8 +351,6 @@ def fetch_candidate_schools(
     per_page: int = 100,
     n_pages: int = 2,
     highest_degree: int = 0,
-    min_pred_degree: int = 0,
-    iclevel: int = 0,
 ) -> list[dict]:
     """
     Fetch a large batch of schools for Smart Matcher scoring.
@@ -361,14 +359,10 @@ def fetch_candidate_schools(
     cip_2digit: 2-digit CIP prefix (e.g. "22" for Law, "51" for Medicine).
     When provided, filters the API to schools that offer programs in that CIP range.
 
-    highest_degree: Minimum HIGHDEG value (4=Graduate). Filters out schools that
-    don't award degrees at this level.
-
-    min_pred_degree: Minimum PREDDEG value (3=Bachelor's, 4=Graduate). Filters out
-    schools where the predominant degree is below this level (e.g. community colleges).
-
-    iclevel: Institution level (1=4-year, 2=2-year). Pass 1 for grad searches to
-    exclude 2-year and less-than-2-year institutions.
+    highest_degree: HIGHDEG value to filter on (4=Graduate, 3=Bachelor's+).
+    Filters out schools that don't award degrees at this level.
+    PREDDEG and ICLEVEL filtering is done client-side after fetching because
+    the Scorecard API does not reliably support __range on those fields.
     """
     all_results: list[dict] = []
 
@@ -395,13 +389,6 @@ def fetch_candidate_schools(
             # HIGHDEG: only schools whose highest awarded degree meets this level.
             # 1=Certificate, 2=Associate, 3=Bachelor's, 4=Graduate
             params["school.degrees_awarded.highest"] = highest_degree
-        if min_pred_degree:
-            # PREDDEG: exclude schools predominantly awarding below this level.
-            # Filters out schools where most students get certificates/associates.
-            params["school.degrees_awarded.predominant__range"] = f"{min_pred_degree}..4"
-        if iclevel:
-            # ICLEVEL: 1=4-year institution, 2=2-year, 3=less than 2-year.
-            params["school.institutional_characteristics.level"] = iclevel
 
         try:
             resp = requests.get(API_BASE, params=params, timeout=20)

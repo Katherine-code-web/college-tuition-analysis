@@ -160,27 +160,10 @@ cip_prefix = target_cip[:2] if target_cip else ""
 
 _is_grad_mode = target_degree_val in _GRAD_DEGREES
 
-# Degree-level filters for grad searches (HIGHDEG, PREDDEG, ICLEVEL).
-# These mirror the College Scorecard HIGHDEG/PREDDEG/ICLEVEL variables and
-# prevent vocational / community-college results from appearing for MBA searches.
-#
-#   HIGHDEG = 4  → school awards graduate degrees
-#   PREDDEG ≥ 3  → school predominantly awards bachelor's or higher
-#   ICLEVEL = 1  → 4-year institution
-#
-# For bachelor's searches keep HIGHDEG ≥ 3 and PREDDEG ≥ 3 (no ICLEVEL filter).
-if _is_grad_mode:
-    _highest_degree = 4
-    _min_pred_degree = 3
-    _iclevel = 1
-elif target_degree_val == "Bachelor's":
-    _highest_degree = 3
-    _min_pred_degree = 3
-    _iclevel = 0
-else:
-    _highest_degree = 0
-    _min_pred_degree = 0
-    _iclevel = 0
+# API-level degree filter: only HIGHDEG is used in the API call because
+# the Scorecard API does not reliably support __range on PREDDEG/ICLEVEL.
+# PREDDEG and ICLEVEL filtering is applied client-side after fetching.
+_highest_degree = 4 if _is_grad_mode else (3 if target_degree_val == "Bachelor's" else 0)
 
 with st.spinner(
     f"🔍 Searching schools offering {field_override}..." if lang == "en"
@@ -193,8 +176,6 @@ with st.spinner(
         per_page=100,
         n_pages=2,
         highest_degree=_highest_degree,
-        min_pred_degree=_min_pred_degree,
-        iclevel=_iclevel,
     )
     # Fallback 1: drop state filter if too few results
     if len(raw) < 10 and preferred_states:
@@ -205,8 +186,6 @@ with st.spinner(
             per_page=100,
             n_pages=2,
             highest_degree=_highest_degree,
-            min_pred_degree=_min_pred_degree,
-            iclevel=_iclevel,
         )
     # Fallback 2: drop CIP filter too (API may not support it for all fields)
     if len(raw) < 10:
@@ -217,8 +196,6 @@ with st.spinner(
             per_page=100,
             n_pages=2,
             highest_degree=_highest_degree,
-            min_pred_degree=_min_pred_degree,
-            iclevel=_iclevel,
         )
 
 rows = [matcher_result_to_row(r) for r in raw]
@@ -233,6 +210,21 @@ if df.empty:
     st.stop()
 
 df = enrich_df(df)
+
+# ── Client-side degree-level filter (PREDDEG / ICLEVEL) ──────────────────────
+# The Scorecard API only reliably filters on HIGHDEG (highest_degree above).
+# We apply PREDDEG and ICLEVEL here after fetching to further exclude
+# vocational/community-college results for grad and bachelor's searches.
+if _is_grad_mode:
+    # PREDDEG >= 3: drop schools where most students get certificates/associates
+    if "degree_pred" in df.columns:
+        df = df[df["degree_pred"].isna() | (df["degree_pred"] >= 3)].copy()
+    # ICLEVEL == 1: keep only 4-year institutions (or missing data)
+    if "iclevel" in df.columns:
+        df = df[df["iclevel"].isna() | (df["iclevel"] == 1)].copy()
+elif target_degree_val == "Bachelor's":
+    if "degree_pred" in df.columns:
+        df = df[df["degree_pred"].isna() | (df["degree_pred"] >= 3)].copy()
 
 # ── Budget hard cap: exclude schools > budget × 1.2 ──────────────────────────
 _budget = budget_override or 50000
