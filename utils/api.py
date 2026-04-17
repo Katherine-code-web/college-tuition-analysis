@@ -295,6 +295,7 @@ MATCHER_FIELDS = FIELDS + "," + ",".join([
     "latest.admissions.sat_scores.75th_percentile.critical_reading",
     "latest.admissions.act_scores.25th_percentile.cumulative",
     "latest.admissions.act_scores.75th_percentile.cumulative",
+    "school.degrees_awarded.highest",
 ])
 
 
@@ -334,6 +335,7 @@ def matcher_result_to_row(r: dict) -> dict:
         "sat_p75": (sat_v75 + sat_m75) if (sat_v75 and sat_m75) else None,
         "act_p25": r.get("latest.admissions.act_scores.25th_percentile.cumulative"),
         "act_p75": r.get("latest.admissions.act_scores.75th_percentile.cumulative"),
+        "degree_highest": r.get("school.degrees_awarded.highest"),
     }
 
 
@@ -344,6 +346,7 @@ def fetch_candidate_schools(
     cip_2digit: str = "",
     per_page: int = 100,
     n_pages: int = 2,
+    highest_degree: int = 0,
 ) -> list[dict]:
     """
     Fetch a large batch of schools for Smart Matcher scoring.
@@ -373,6 +376,10 @@ def fetch_candidate_schools(
             lo = int(cip_2digit) * 100
             hi = lo + 99
             params["latest.programs.cip_4_digit.code__range"] = f"{lo}..{hi}"
+        if highest_degree:
+            # Filter to schools whose highest awarded degree meets the minimum level.
+            # 1=Certificate, 2=Associate, 3=Bachelor's, 4=Graduate
+            params["school.degrees_awarded.highest"] = highest_degree
 
         try:
             resp = requests.get(API_BASE, params=params, timeout=20)

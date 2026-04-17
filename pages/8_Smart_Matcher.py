@@ -155,6 +155,11 @@ effective_profile = {**profile, "annual_budget": budget_override}
 target_cip = effective_profile.get("target_field_cip", "")
 cip_prefix = target_cip[:2] if target_cip else ""
 
+_is_grad_mode = target_degree_val in _GRAD_DEGREES
+# For grad searches, restrict to schools that award graduate degrees (level 4).
+# This prevents vocational/tech schools (level 1-2) from dominating the results.
+_degree_filter = 4 if _is_grad_mode else 0
+
 with st.spinner(
     f"🔍 Searching schools offering {field_override}..." if lang == "en"
     else f"🔍 搜尋提供「{field_override}」的學校..."
@@ -165,6 +170,7 @@ with st.spinner(
         cip_2digit=cip_prefix,
         per_page=100,
         n_pages=2,
+        highest_degree=_degree_filter,
     )
     # Fallback 1: drop state filter if too few results
     if len(raw) < 10 and preferred_states:
@@ -174,6 +180,7 @@ with st.spinner(
             cip_2digit=cip_prefix,
             per_page=100,
             n_pages=2,
+            highest_degree=_degree_filter,
         )
     # Fallback 2: drop CIP filter too (API may not support it for all fields)
     if len(raw) < 10:
@@ -183,6 +190,7 @@ with st.spinner(
             cip_2digit="",
             per_page=100,
             n_pages=2,
+            highest_degree=_degree_filter,
         )
 
 rows = [matcher_result_to_row(r) for r in raw]
@@ -345,8 +353,6 @@ else:
     n_with_field = n_with_earnings = len(df)
     n_suppressed = 0
 
-_is_grad_search = target_degree_val in _GRAD_DEGREES
-
 # ── Summary line ──────────────────────────────────────────────────────────────
 if n_suppressed > 0 and n_with_earnings == 0:
     # All earnings suppressed — prominent warning for grad users
@@ -357,7 +363,7 @@ if n_suppressed > 0 and n_with_earnings == 0:
         else f"**已評分 {len(df)} 所學校** — {n_with_field} 所提供「{field_label}」科系"
              f"（全部 {n_suppressed} 所的薪資資料均被隱藏）。"
     )
-    if _is_grad_search:
+    if _is_grad_mode:
         st.warning(
             f"⚠️ **Data limitation:** All {n_with_field} schools offering "
             f"**{field_label}** at {target_degree_val} level have their program earnings "
@@ -438,7 +444,6 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
     earn_conf = row.get("earnings_confidence", "institution")
     earn_str = fmt_usd(earn_val) if earn_val else "N/A"
     earn_badge = earnings_confidence_html(earn_conf, lang) if earn_str != "N/A" else ""
-    earn_note = f" {earn_badge}" if earn_badge else ""
     grad_str = fmt_pct(row.get("completion_rate"))
     budget_text = row.get("budget_fit_text", "")
     budget_color = row.get("budget_fit_color", "#555")
@@ -492,8 +497,10 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
 
   <!-- School name + location -->
   <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;
-      color:#1A1A1A;line-height:1.3;margin-bottom:4px;">{name}</div>
-  <div style="font-size:0.83rem;color:#777;margin-bottom:14px;">
+      color:#1A1A1A;line-height:1.3;margin-bottom:4px;
+      word-break:break-word;overflow-wrap:anywhere;">{name}</div>
+  <div style="font-size:0.83rem;color:#777;margin-bottom:14px;
+      word-break:break-word;overflow-wrap:anywhere;">
     📍 {location} &nbsp;·&nbsp; {school_type}
   </div>
 
@@ -531,9 +538,8 @@ def school_card(row: dict, category_label: str, category_color: str) -> str:
         <div style="font-size:0.72rem;color:#888;">
           💼 {'Earnings' if lang == 'en' else '薪資'}
         </div>
-        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;word-break:break-word;">
-          {earn_str}{earn_note}
-        </div>
+        <div style="font-size:0.92rem;font-weight:800;color:#1A1A1A;">{earn_str}</div>
+        {f'<div style="margin-top:3px;">{earn_badge}</div>' if earn_badge else ''}
       </div>
       <div style="min-width:0;overflow:hidden;">
         <div style="font-size:0.72rem;color:#888;">
