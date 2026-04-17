@@ -148,6 +148,8 @@ if not st.session_state.get("matcher_run"):
     )
     st.stop()
 
+_GRAD_DEGREES = {"Master's", "MBA", "Doctoral"}
+
 # Build an effective profile with sidebar overrides
 effective_profile = {**profile, "annual_budget": budget_override}
 
@@ -360,7 +362,6 @@ df["earnings_confidence"] = list(_earn_confs)
 # For graduate programs, add program reputation scores from the lookup table.
 # score_schools_df uses this column to replace the cp_value dimension
 # (which is based on institution-wide undergrad earnings — misleading for grad).
-_GRAD_DEGREES = {"Master's", "MBA", "Doctoral"}
 if cip_prefix and target_degree_val in _GRAD_DEGREES:
     all_ids = df["id"].dropna().astype(int).tolist()
     df["reputation_bonus"] = df["id"].apply(
