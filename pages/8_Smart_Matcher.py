@@ -151,7 +151,8 @@ if not st.session_state.get("matcher_run"):
 # Build an effective profile with sidebar overrides
 effective_profile = {**profile, "annual_budget": budget_override}
 
-# Derive CIP 2-digit prefix from profile field selection
+# Derive CIP 2-digit prefix and degree from profile
+target_degree_val = effective_profile.get("target_degree", "Bachelor's")
 target_cip = effective_profile.get("target_field_cip", "")
 cip_prefix = target_cip[:2] if target_cip else ""
 
@@ -279,8 +280,6 @@ if len(df) < 10 and _is_grad_mode:
 field_earn_map: dict[int, float] = {}
 field_present_map: dict[int, bool | None] = {}
 field_size_map: dict[int, int] = {}
-
-target_degree_val = effective_profile.get("target_degree", "Bachelor's")
 
 if cip_prefix:
     with st.spinner(
