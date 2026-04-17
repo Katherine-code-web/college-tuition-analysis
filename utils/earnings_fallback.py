@@ -5,10 +5,11 @@ When College Scorecard field-of-study earnings are privacy-suppressed
 (common for graduate cohorts), this module provides national-level estimates.
 
 Layer 1 — College Scorecard program-level  (handled in Smart Matcher directly)
-Layer 2 — ACS PUMS field-level             (national Master's median by field)
+Layer 2a — Program starting salary CSV     (school + program specific medians)
+Layer 2b — ACS PUMS field-level            (national Master's median by field)
 Layer 3 — BLS OEWS occupation-level        (CSV from scripts/build_bls_earnings_table.py)
 
-⚠️  Layer 2 figures are estimated from ACS + Georgetown CEW published data.
+⚠️  Layer 2b figures are estimated from ACS + Georgetown CEW published data.
     They reflect the NATIONAL median for Master's holders in each field,
     not the outcome at any specific school.  A Harvard MBA vs. a random MBA
     will have very different actual outcomes.
@@ -28,8 +29,31 @@ import streamlit as st
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Mapping from College Scorecard CIP 2-digit prefix + degree → program label
+# used to look up rows in program_starting_salary.csv
+_CIP_DEGREE_TO_PROGRAM: dict[tuple[str, str], list[str]] = {
+    ("11", "Master's"): ["Computer Science (MS)", "Data Science (MS)"],
+    ("11", "MBA"):      ["Business Analytics (MS)"],
+    ("14", "Master's"): ["Electrical & Computer Engineering (MS)"],
+    ("52", "MBA"):      ["MBA", "Business Analytics (MS)", "Finance (MS)"],
+    ("52", "Master's"): ["Business Analytics (MS)", "Finance (MS)"],
+    ("22", "Law (JD)"): ["Law (JD)"],
+    ("22", "Doctoral"): ["Law (JD)"],
+    ("27", "Master's"): ["Data Science (MS)"],
+    ("30", "Master's"): ["Data Science (MS)"],
+    ("45", "Master's"): ["Data Science (MS)"],
+}
+
 
 # ── Cached loaders ────────────────────────────────────────────────────────────
+
+@st.cache_data(show_spinner=False)
+def _load_program_salaries() -> pd.DataFrame:
+    path = _DATA_DIR / "program_starting_salary.csv"
+    if path.exists():
+        return pd.read_csv(path, dtype={"unitid": str})
+    return pd.DataFrame()
+
 
 @st.cache_data(show_spinner=False)
 def _load_acs_earnings() -> pd.DataFrame:
@@ -56,6 +80,58 @@ def _load_fod_mapping() -> pd.DataFrame:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
+def get_program_salary(
+    school_name: str,
+    unitid: int | str | None,
+    cip_2digit: str,
+    credential_level: str,
+) -> int | None:
+    """
+    Look up a school-specific program starting salary from program_starting_salary.csv.
+
+    Tries to match by unitid first (exact), then by school_name (case-insensitive
+    partial match). Returns the median_starting_salary as an int, or None if no
+    match is found.
+    """
+    df = _load_program_salaries()
+    if df.empty:
+        return None
+
+    # Determine which program labels to search for this CIP + degree combo
+    prog_labels = _CIP_DEGREE_TO_PROGRAM.get((str(cip_2digit).zfill(2), credential_level), [])
+    if not prog_labels:
+        # Fallback: try just the credential level as a suffix match
+        prog_labels = [p for p in df["program"].unique() if credential_level in p]
+    if not prog_labels:
+        return None
+
+    subset = df[df["program"].isin(prog_labels)]
+    if subset.empty:
+        return None
+
+    # Try exact unitid match first
+    if unitid is not None:
+        try:
+            uid_str = str(int(unitid))
+            id_match = subset[subset["unitid"] == uid_str]
+            if not id_match.empty:
+                return int(id_match["median_starting_salary"].iloc[0])
+        except (ValueError, TypeError):
+            pass
+
+    # Fuzzy name match: check if school_name appears in CSV name or vice versa
+    if school_name:
+        name_lower = school_name.lower()
+        name_match = subset[
+            subset["school_name"].str.lower().str.contains(name_lower[:30], regex=False, na=False)
+            | subset["school_name"].str.lower().apply(lambda n: n[:30] in name_lower)
+        ]
+        if not name_match.empty:
+            return int(name_match["median_starting_salary"].iloc[0])
+
+    return None
+
 
 CONFIDENCE_LEVELS = ("program", "field_national", "occupation", "institution")
 

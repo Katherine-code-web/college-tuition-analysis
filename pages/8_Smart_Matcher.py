@@ -15,7 +15,7 @@ from utils.calculations import enrich_df, CIP_CATEGORIES
 from utils.matching import score_schools_df, classify_school
 from utils.field_suggestions import get_field_hint
 from utils.program_reputation import get_reputation_score
-from utils.earnings_fallback import get_field_earnings, earnings_confidence_html, CONFIDENCE_BADGES
+from utils.earnings_fallback import get_field_earnings, get_program_salary, earnings_confidence_html, CONFIDENCE_BADGES
 
 st.set_page_config(page_title="Smart Matcher", page_icon="🎯", layout="wide")
 st.markdown(get_theme_css(), unsafe_allow_html=True)
@@ -330,16 +330,36 @@ if cip_prefix:
 def _resolve_earnings(row: pd.Series) -> tuple[float | None, str]:
     """
     Return (earnings_value, confidence_level) for one school row.
-    Priority: program (Scorecard) > field_national (ACS) > institution.
+
+    4-layer priority:
+      1. College Scorecard program-level earnings (school + field specific)
+      2. program_starting_salary.csv (school + program specific, our curated data)
+      3. National ACS/BLS field-level median (same for all schools — used only if
+         no school-specific data exists)
+      4. School-wide 10-year earnings from Scorecard (last resort)
     """
+    # Layer 1: Scorecard program-level earnings
     prog_earn = row.get("field_earnings")
     if pd.notna(prog_earn) and prog_earn:
         return prog_earn, "program"
 
+    # Layer 2: school-specific program salary from our curated CSV
+    if cip_prefix:
+        school_sal = get_program_salary(
+            school_name=row.get("name", ""),
+            unitid=row.get("id"),
+            cip_2digit=cip_prefix,
+            credential_level=target_degree_val,
+        )
+        if school_sal:
+            return school_sal, "program"
+
+    # Layer 3: national ACS/BLS field-level median (same value for all schools)
     nat_median = _national_fallback.get("median")
     if nat_median:
         return nat_median, _national_fallback.get("confidence", "field_national")
 
+    # Layer 4: school-wide 10-year earnings
     inst_earn = row.get("earnings_10yr")
     if pd.notna(inst_earn) and inst_earn:
         return inst_earn, "institution"
@@ -362,11 +382,13 @@ if cip_prefix and target_degree_val in _GRAD_DEGREES:
     )
 
 # Pass display_earnings into field_earnings so score_schools_df uses the best
-# available signal (program > national ACS > institution) for the employment dimension.
-# Only override where Scorecard program earnings are missing.
+# available signal (program-specific CSV > national ACS > institution) for the
+# employment dimension.  Override where Scorecard program earnings are missing
+# but a better fallback was found (either from our CSV or from ACS/BLS).
 if "field_earnings" in df.columns and "display_earnings" in df.columns:
+    use_fallback = df["earnings_confidence"].isin(["program", "field_national", "occupation"])
     df["field_earnings"] = df["field_earnings"].fillna(
-        df["display_earnings"].where(df["earnings_confidence"] == "field_national")
+        df["display_earnings"].where(use_fallback)
     )
 
 df = score_schools_df(effective_profile, df)

@@ -1,0 +1,309 @@
+school_name,unitid,program,median_starting_salary,source,year
+Massachusetts Institute of Technology,166683,Computer Science (MS),155000,PayScale 2024,2024
+Stanford University,243744,Computer Science (MS),160000,PayScale 2024,2024
+Carnegie Mellon University,211440,Computer Science (MS),152000,PayScale 2024,2024
+University of California-Berkeley,110635,Computer Science (MS),148000,PayScale 2024,2024
+University of Illinois Urbana-Champaign,145637,Computer Science (MS),142000,PayScale 2024,2024
+Georgia Institute of Technology,139755,Computer Science (MS),138000,PayScale 2024,2024
+University of Washington,236948,Computer Science (MS),145000,PayScale 2024,2024
+Cornell University,190415,Computer Science (MS),143000,PayScale 2024,2024
+University of California-Los Angeles,110662,Computer Science (MS),140000,PayScale 2024,2024
+University of California-San Diego,110680,Computer Science (MS),138000,PayScale 2024,2024
+University of Texas at Austin,228778,Computer Science (MS),135000,PayScale 2024,2024
+Purdue University,243780,Computer Science (MS),128000,PayScale 2024,2024
+University of Southern California,123961,Computer Science (MS),135000,PayScale 2024,2024
+New York University,193900,Computer Science (MS),132000,PayScale 2024,2024
+Columbia University,190150,Computer Science (MS),138000,PayScale 2024,2024
+University of Michigan-Ann Arbor,170976,Computer Science (MS),140000,PayScale 2024,2024
+University of Massachusetts-Amherst,166629,Computer Science (MS),125000,PayScale 2024,2024
+Boston University,164924,Computer Science (MS),122000,PayScale 2024,2024
+Northeastern University,167358,Computer Science (MS),120000,PayScale 2024,2024
+Duke University,198419,Computer Science (MS),133000,PayScale 2024,2024
+Rice University,227757,Computer Science (MS),128000,PayScale 2024,2024
+University of North Carolina at Chapel Hill,199120,Computer Science (MS),120000,PayScale 2024,2024
+University of Maryland-College Park,163286,Computer Science (MS),130000,PayScale 2024,2024
+Virginia Polytechnic Institute and State University,233921,Computer Science (MS),118000,PayScale 2024,2024
+University of Wisconsin-Madison,240444,Computer Science (MS),122000,PayScale 2024,2024
+Ohio State University,204796,Computer Science (MS),115000,PayScale 2024,2024
+Penn State University,214777,Computer Science (MS),115000,PayScale 2024,2024
+University of Minnesota-Twin Cities,174066,Computer Science (MS),118000,PayScale 2024,2024
+Arizona State University,104151,Computer Science (MS),110000,PayScale 2024,2024
+Stony Brook University,196592,Computer Science (MS),118000,PayScale 2024,2024
+Carnegie Mellon University,211440,Data Science (MS),148000,PayScale 2024,2024
+Columbia University,190150,Data Science (MS),138000,PayScale 2024,2024
+New York University,193900,Data Science (MS),130000,PayScale 2024,2024
+University of California-Berkeley,110635,Data Science (MS),142000,PayScale 2024,2024
+University of Michigan-Ann Arbor,170976,Data Science (MS),130000,PayScale 2024,2024
+University of Illinois Urbana-Champaign,145637,Data Science (MS),128000,PayScale 2024,2024
+University of Washington,236948,Data Science (MS),138000,PayScale 2024,2024
+Massachusetts Institute of Technology,166683,Data Science (MS),148000,PayScale 2024,2024
+Stanford University,243744,Data Science (MS),152000,PayScale 2024,2024
+University of California-Los Angeles,110662,Data Science (MS),130000,PayScale 2024,2024
+University of California-San Diego,110680,Data Science (MS),128000,PayScale 2024,2024
+Duke University,198419,Data Science (MS),125000,PayScale 2024,2024
+Northwestern University,147767,Data Science (MS),130000,PayScale 2024,2024
+Georgetown University,131469,Data Science (MS),118000,PayScale 2024,2024
+University of Southern California,123961,Data Science (MS),125000,PayScale 2024,2024
+Northeastern University,167358,Data Science (MS),115000,PayScale 2024,2024
+Boston University,164924,Data Science (MS),112000,PayScale 2024,2024
+University of Texas at Austin,228778,Data Science (MS),122000,PayScale 2024,2024
+Georgia Institute of Technology,139755,Data Science (MS),125000,PayScale 2024,2024
+University of Maryland-College Park,163286,Data Science (MS),118000,PayScale 2024,2024
+Massachusetts Institute of Technology,166683,Electrical & Computer Engineering (MS),145000,PayScale 2024,2024
+Stanford University,243744,Electrical & Computer Engineering (MS),148000,PayScale 2024,2024
+Carnegie Mellon University,211440,Electrical & Computer Engineering (MS),140000,PayScale 2024,2024
+University of California-Berkeley,110635,Electrical & Computer Engineering (MS),142000,PayScale 2024,2024
+Georgia Institute of Technology,139755,Electrical & Computer Engineering (MS),132000,PayScale 2024,2024
+University of Illinois Urbana-Champaign,145637,Electrical & Computer Engineering (MS),132000,PayScale 2024,2024
+University of Michigan-Ann Arbor,170976,Electrical & Computer Engineering (MS),132000,PayScale 2024,2024
+Cornell University,190415,Electrical & Computer Engineering (MS),135000,PayScale 2024,2024
+Purdue University,243780,Electrical & Computer Engineering (MS),120000,PayScale 2024,2024
+University of California-Los Angeles,110662,Electrical & Computer Engineering (MS),130000,PayScale 2024,2024
+University of California-San Diego,110680,Electrical & Computer Engineering (MS),128000,PayScale 2024,2024
+University of Texas at Austin,228778,Electrical & Computer Engineering (MS),125000,PayScale 2024,2024
+Columbia University,190150,Electrical & Computer Engineering (MS),130000,PayScale 2024,2024
+University of Southern California,123961,Electrical & Computer Engineering (MS),125000,PayScale 2024,2024
+University of Washington,236948,Electrical & Computer Engineering (MS),132000,PayScale 2024,2024
+Duke University,198419,Electrical & Computer Engineering (MS),128000,PayScale 2024,2024
+Ohio State University,204796,Electrical & Computer Engineering (MS),112000,PayScale 2024,2024
+Penn State University,214777,Electrical & Computer Engineering (MS),112000,PayScale 2024,2024
+Virginia Polytechnic Institute and State University,233921,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+University of Wisconsin-Madison,240444,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+Harvard University,166027,MBA,175000,GMAC 2024,2024
+Stanford University,243744,MBA,185000,GMAC 2024,2024
+University of Pennsylvania,215062,MBA,175000,GMAC 2024,2024
+University of Chicago,144050,MBA,175000,GMAC 2024,2024
+Northwestern University,147767,MBA,165000,GMAC 2024,2024
+Massachusetts Institute of Technology,166683,MBA,168000,GMAC 2024,2024
+University of California-Berkeley,110635,MBA,160000,GMAC 2024,2024
+Columbia University,190150,MBA,165000,GMAC 2024,2024
+Dartmouth College,182670,MBA,158000,GMAC 2024,2024
+Yale University,130794,MBA,155000,GMAC 2024,2024
+Duke University,198419,MBA,148000,GMAC 2024,2024
+University of Virginia,234076,MBA,148000,GMAC 2024,2024
+University of Michigan-Ann Arbor,170976,MBA,155000,GMAC 2024,2024
+New York University,193900,MBA,150000,GMAC 2024,2024
+Cornell University,190415,MBA,148000,GMAC 2024,2024
+University of California-Los Angeles,110662,MBA,148000,GMAC 2024,2024
+Carnegie Mellon University,211440,MBA,148000,GMAC 2024,2024
+University of Texas at Austin,228778,MBA,140000,GMAC 2024,2024
+Georgetown University,131469,MBA,135000,GMAC 2024,2024
+University of Notre Dame,152080,MBA,132000,GMAC 2024,2024
+Emory University,139658,MBA,130000,GMAC 2024,2024
+University of North Carolina at Chapel Hill,199120,MBA,128000,GMAC 2024,2024
+Indiana University-Bloomington,151351,MBA,125000,GMAC 2024,2024
+Washington University in St Louis,179867,MBA,130000,GMAC 2024,2024
+University of Southern California,123961,MBA,130000,GMAC 2024,2024
+Ohio State University,204796,MBA,120000,GMAC 2024,2024
+Vanderbilt University,221999,MBA,130000,GMAC 2024,2024
+Rice University,227757,MBA,128000,GMAC 2024,2024
+University of Minnesota-Twin Cities,174066,MBA,118000,GMAC 2024,2024
+University of Washington,236948,MBA,128000,GMAC 2024,2024
+Yale University,130794,Law (JD),190000,NALP 2023,2023
+Harvard University,166027,Law (JD),215000,NALP 2023,2023
+Stanford University,243744,Law (JD),215000,NALP 2023,2023
+Columbia University,190150,Law (JD),215000,NALP 2023,2023
+New York University,193900,Law (JD),215000,NALP 2023,2023
+University of Chicago,144050,Law (JD),215000,NALP 2023,2023
+University of Pennsylvania,215062,Law (JD),215000,NALP 2023,2023
+University of Virginia,234076,Law (JD),205000,NALP 2023,2023
+Duke University,198419,Law (JD),205000,NALP 2023,2023
+University of Michigan-Ann Arbor,170976,Law (JD),205000,NALP 2023,2023
+Northwestern University,147767,Law (JD),215000,NALP 2023,2023
+Cornell University,190415,Law (JD),205000,NALP 2023,2023
+Georgetown University,131469,Law (JD),190000,NALP 2023,2023
+University of California-Berkeley,110635,Law (JD),205000,NALP 2023,2023
+Vanderbilt University,221999,Law (JD),190000,NALP 2023,2023
+University of California-Los Angeles,110662,Law (JD),185000,NALP 2023,2023
+Washington University in St Louis,179867,Law (JD),185000,NALP 2023,2023
+University of Texas at Austin,228778,Law (JD),185000,NALP 2023,2023
+University of Southern California,123961,Law (JD),175000,NALP 2023,2023
+Emory University,139658,Law (JD),175000,NALP 2023,2023
+University of Notre Dame,152080,Law (JD),175000,NALP 2023,2023
+University of Minnesota-Twin Cities,174066,Law (JD),165000,NALP 2023,2023
+Boston University,164924,Law (JD),165000,NALP 2023,2023
+George Washington University,131520,Law (JD),162000,NALP 2023,2023
+University of North Carolina at Chapel Hill,199120,Law (JD),160000,NALP 2023,2023
+Princeton University,186131,Finance (MS),150000,US News 2024,2024
+Massachusetts Institute of Technology,166683,Finance (MS),148000,US News 2024,2024
+Columbia University,190150,Finance (MS),145000,US News 2024,2024
+New York University,193900,Finance (MS),142000,US News 2024,2024
+Carnegie Mellon University,211440,Finance (MS),140000,US News 2024,2024
+University of Chicago,144050,Finance (MS),145000,US News 2024,2024
+University of Pennsylvania,215062,Finance (MS),150000,US News 2024,2024
+Yale University,130794,Finance (MS),138000,US News 2024,2024
+Cornell University,190415,Finance (MS),135000,US News 2024,2024
+Vanderbilt University,221999,Finance (MS),130000,US News 2024,2024
+University of Michigan-Ann Arbor,170976,Finance (MS),132000,US News 2024,2024
+Claremont McKenna College,110486,Finance (MS),125000,US News 2024,2024
+Johns Hopkins University,162928,Finance (MS),128000,US News 2024,2024
+University of Rochester,195003,Finance (MS),122000,US News 2024,2024
+Boston College,164465,Finance (MS),120000,US News 2024,2024
+Georgetown University,131469,Finance (MS),128000,US News 2024,2024
+Fordham University,190567,Finance (MS),118000,US News 2024,2024
+Northeastern University,167358,Finance (MS),115000,US News 2024,2024
+University of Illinois Urbana-Champaign,145637,Finance (MS),120000,US News 2024,2024
+University of Texas at Austin,228778,Finance (MS),125000,US News 2024,2024
+Purdue University,243780,Finance (MS),112000,US News 2024,2024
+Indiana University-Bloomington,151351,Finance (MS),115000,US News 2024,2024
+Ohio State University,204796,Finance (MS),110000,US News 2024,2024
+University of Southern California,123961,Finance (MS),120000,US News 2024,2024
+University of Washington,236948,Finance (MS),118000,US News 2024,2024
+Carnegie Mellon University,211440,Business Analytics (MS),138000,PayScale 2024,2024
+Massachusetts Institute of Technology,166683,Business Analytics (MS),140000,PayScale 2024,2024
+Columbia University,190150,Business Analytics (MS),132000,PayScale 2024,2024
+New York University,193900,Business Analytics (MS),128000,PayScale 2024,2024
+University of Southern California,123961,Business Analytics (MS),125000,PayScale 2024,2024
+University of Texas at Austin,228778,Business Analytics (MS),120000,PayScale 2024,2024
+University of Notre Dame,152080,Business Analytics (MS),118000,PayScale 2024,2024
+Emory University,139658,Business Analytics (MS),115000,PayScale 2024,2024
+Duke University,198419,Business Analytics (MS),128000,PayScale 2024,2024
+Indiana University-Bloomington,151351,Business Analytics (MS),112000,PayScale 2024,2024
+University of Minnesota-Twin Cities,174066,Business Analytics (MS),112000,PayScale 2024,2024
+University of Connecticut,129020,Business Analytics (MS),108000,PayScale 2024,2024
+Purdue University,243780,Business Analytics (MS),110000,PayScale 2024,2024
+University of Michigan-Ann Arbor,170976,Business Analytics (MS),122000,PayScale 2024,2024
+Northwestern University,147767,Business Analytics (MS),128000,PayScale 2024,2024
+University of California-Los Angeles,110662,Business Analytics (MS),125000,PayScale 2024,2024
+University of California-Davis,110644,Business Analytics (MS),112000,PayScale 2024,2024
+Boston University,164924,Business Analytics (MS),112000,PayScale 2024,2024
+George Washington University,131520,Business Analytics (MS),108000,PayScale 2024,2024
+University of Illinois Urbana-Champaign,145637,Business Analytics (MS),118000,PayScale 2024,2024
+Villanova University,216694,Business Analytics (MS),105000,PayScale 2024,2024
+University of Florida,134130,Business Analytics (MS),108000,PayScale 2024,2024
+University of Georgia,139940,Business Analytics (MS),105000,PayScale 2024,2024
+Penn State University,214777,Business Analytics (MS),108000,PayScale 2024,2024
+Arizona State University,104151,Business Analytics (MS),105000,PayScale 2024,2024
+Harvard University,166027,Computer Science (MS),158000,PayScale 2024,2024
+Yale University,130794,Computer Science (MS),138000,PayScale 2024,2024
+Princeton University,186131,Computer Science (MS),148000,PayScale 2024,2024
+Johns Hopkins University,162928,Computer Science (MS),132000,PayScale 2024,2024
+Northwestern University,147767,Computer Science (MS),135000,PayScale 2024,2024
+Vanderbilt University,221999,Computer Science (MS),122000,PayScale 2024,2024
+University of Notre Dame,152080,Computer Science (MS),118000,PayScale 2024,2024
+University of Florida,134130,Computer Science (MS),115000,PayScale 2024,2024
+University of Georgia,139940,Computer Science (MS),110000,PayScale 2024,2024
+Texas A&M University,228723,Computer Science (MS),118000,PayScale 2024,2024
+Rutgers University-New Brunswick,186380,Computer Science (MS),118000,PayScale 2024,2024
+George Washington University,131520,Computer Science (MS),115000,PayScale 2024,2024
+University of Colorado Boulder,126614,Computer Science (MS),118000,PayScale 2024,2024
+North Carolina State University,199193,Computer Science (MS),118000,PayScale 2024,2024
+Michigan State University,171100,Computer Science (MS),112000,PayScale 2024,2024
+Indiana University-Bloomington,151351,Computer Science (MS),115000,PayScale 2024,2024
+Washington University in St Louis,179867,Computer Science (MS),128000,PayScale 2024,2024
+University of Rochester,195003,Computer Science (MS),118000,PayScale 2024,2024
+Emory University,139658,Computer Science (MS),115000,PayScale 2024,2024
+Georgetown University,131469,Computer Science (MS),118000,PayScale 2024,2024
+University of Pittsburgh,207547,Computer Science (MS),112000,PayScale 2024,2024
+Tufts University,168148,Computer Science (MS),118000,PayScale 2024,2024
+Case Western Reserve University,201885,Computer Science (MS),115000,PayScale 2024,2024
+University of California-Davis,110644,Computer Science (MS),125000,PayScale 2024,2024
+University of California-Santa Barbara,110705,Computer Science (MS),130000,PayScale 2024,2024
+University of California-Irvine,110653,Computer Science (MS),128000,PayScale 2024,2024
+Harvard University,166027,Data Science (MS),152000,PayScale 2024,2024
+Johns Hopkins University,162928,Data Science (MS),128000,PayScale 2024,2024
+Princeton University,186131,Data Science (MS),140000,PayScale 2024,2024
+University of Virginia,234076,Data Science (MS),120000,PayScale 2024,2024
+Penn State University,214777,Data Science (MS),115000,PayScale 2024,2024
+University of Wisconsin-Madison,240444,Data Science (MS),118000,PayScale 2024,2024
+Purdue University,243780,Data Science (MS),118000,PayScale 2024,2024
+University of California-Davis,110644,Data Science (MS),120000,PayScale 2024,2024
+University of California-Santa Barbara,110705,Data Science (MS),122000,PayScale 2024,2024
+Indiana University-Bloomington,151351,Data Science (MS),112000,PayScale 2024,2024
+George Washington University,131520,Data Science (MS),112000,PayScale 2024,2024
+Northeastern University,167358,Data Science (MS),115000,PayScale 2024,2024
+University of Rochester,195003,Data Science (MS),112000,PayScale 2024,2024
+Yale University,130794,Data Science (MS),132000,PayScale 2024,2024
+Rutgers University-New Brunswick,186380,Data Science (MS),112000,PayScale 2024,2024
+Carnegie Mellon University,211440,Electrical & Computer Engineering (MS),140000,PayScale 2024,2024
+Johns Hopkins University,162928,Electrical & Computer Engineering (MS),132000,PayScale 2024,2024
+University of Michigan-Ann Arbor,170976,Electrical & Computer Engineering (MS),130000,PayScale 2024,2024
+Northwestern University,147767,Electrical & Computer Engineering (MS),128000,PayScale 2024,2024
+Penn State University,214777,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+University of Wisconsin-Madison,240444,Electrical & Computer Engineering (MS),118000,PayScale 2024,2024
+University of Maryland-College Park,163286,Electrical & Computer Engineering (MS),125000,PayScale 2024,2024
+Texas A&M University,228723,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+Rutgers University-New Brunswick,186380,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+Boston University,164924,Electrical & Computer Engineering (MS),118000,PayScale 2024,2024
+North Carolina State University,199193,Electrical & Computer Engineering (MS),118000,PayScale 2024,2024
+University of Florida,134130,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+Rice University,227757,Electrical & Computer Engineering (MS),125000,PayScale 2024,2024
+Case Western Reserve University,201885,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+University of Minnesota-Twin Cities,174066,Electrical & Computer Engineering (MS),118000,PayScale 2024,2024
+University of Colorado Boulder,126614,Electrical & Computer Engineering (MS),115000,PayScale 2024,2024
+University of Arizona,104179,Electrical & Computer Engineering (MS),110000,PayScale 2024,2024
+Arizona State University,104151,Electrical & Computer Engineering (MS),110000,PayScale 2024,2024
+Harvard University,166027,Finance (MS),152000,US News 2024,2024
+Northwestern University,147767,Finance (MS),140000,US News 2024,2024
+University of California-Berkeley,110635,Finance (MS),142000,US News 2024,2024
+Duke University,198419,Finance (MS),132000,US News 2024,2024
+University of California-Los Angeles,110662,Finance (MS),128000,US News 2024,2024
+University of North Carolina at Chapel Hill,199120,Finance (MS),115000,US News 2024,2024
+University of Virginia,234076,Finance (MS),128000,US News 2024,2024
+Rice University,227757,Finance (MS),120000,US News 2024,2024
+University of Florida,134130,Finance (MS),108000,US News 2024,2024
+Michigan State University,171100,Finance (MS),108000,US News 2024,2024
+Rutgers University-New Brunswick,186380,Finance (MS),108000,US News 2024,2024
+Case Western Reserve University,201885,Finance (MS),105000,US News 2024,2024
+University of Pittsburgh,207547,Finance (MS),105000,US News 2024,2024
+Temple University,216339,Finance (MS),105000,US News 2024,2024
+Drexel University,130226,Finance (MS),105000,US News 2024,2024
+American University,131159,Finance (MS),105000,US News 2024,2024
+Harvard University,166027,MBA,175000,GMAC 2024,2024
+Texas A&M University,228723,MBA,120000,GMAC 2024,2024
+Arizona State University,104151,MBA,110000,GMAC 2024,2024
+University of Florida,134130,MBA,115000,GMAC 2024,2024
+Penn State University,214777,MBA,118000,GMAC 2024,2024
+Michigan State University,171100,MBA,118000,GMAC 2024,2024
+University of Wisconsin-Madison,240444,MBA,118000,GMAC 2024,2024
+University of Maryland-College Park,163286,MBA,122000,GMAC 2024,2024
+Boston University,164924,MBA,118000,GMAC 2024,2024
+Northeastern University,167358,MBA,115000,GMAC 2024,2024
+University of Pittsburgh,207547,MBA,112000,GMAC 2024,2024
+Rutgers University-New Brunswick,186380,MBA,112000,GMAC 2024,2024
+University of Georgia,139940,MBA,108000,GMAC 2024,2024
+University of Colorado Boulder,126614,MBA,112000,GMAC 2024,2024
+North Carolina State University,199193,MBA,110000,GMAC 2024,2024
+University of Arizona,104179,MBA,108000,GMAC 2024,2024
+Case Western Reserve University,201885,MBA,118000,GMAC 2024,2024
+Johns Hopkins University,162928,MBA,135000,GMAC 2024,2024
+Harvard University,166027,Law (JD),215000,NALP 2023,2023
+University of California-Davis,110644,Law (JD),155000,NALP 2023,2023
+William & Mary,232566,Law (JD),150000,NALP 2023,2023
+Ohio State University,204796,Law (JD),155000,NALP 2023,2023
+University of Wisconsin-Madison,240444,Law (JD),148000,NALP 2023,2023
+Indiana University-Bloomington,151351,Law (JD),148000,NALP 2023,2023
+Tulane University,229115,Law (JD),148000,NALP 2023,2023
+Fordham University,190567,Law (JD),155000,NALP 2023,2023
+University of Florida,134130,Law (JD),145000,NALP 2023,2023
+University of Maryland-College Park,163286,Law (JD),148000,NALP 2023,2023
+Boston College,164465,Law (JD),155000,NALP 2023,2023
+Wake Forest University,200800,Law (JD),140000,NALP 2023,2023
+Temple University,216339,Law (JD),138000,NALP 2023,2023
+Brigham Young University,230038,Law (JD),135000,NALP 2023,2023
+University of Arizona,104179,Law (JD),132000,NALP 2023,2023
+University of Colorado Boulder,126614,Law (JD),135000,NALP 2023,2023
+University of Iowa,153658,Law (JD),132000,NALP 2023,2023
+University of Georgia,139940,Law (JD),135000,NALP 2023,2023
+Loyola University Chicago,147776,Law (JD),132000,NALP 2023,2023
+Drexel University,130226,Law (JD),128000,NALP 2023,2023
+Carnegie Mellon University,211440,Business Analytics (MS),138000,PayScale 2024,2024
+Washington University in St Louis,179867,Business Analytics (MS),120000,PayScale 2024,2024
+Georgetown University,131469,Business Analytics (MS),118000,PayScale 2024,2024
+Yale University,130794,Business Analytics (MS),125000,PayScale 2024,2024
+Johns Hopkins University,162928,Business Analytics (MS),122000,PayScale 2024,2024
+Cornell University,190415,Business Analytics (MS),125000,PayScale 2024,2024
+Rice University,227757,Business Analytics (MS),118000,PayScale 2024,2024
+Vanderbilt University,221999,Business Analytics (MS),118000,PayScale 2024,2024
+University of North Carolina at Chapel Hill,199120,Business Analytics (MS),115000,PayScale 2024,2024
+University of Washington,236948,Business Analytics (MS),120000,PayScale 2024,2024
+Rutgers University-New Brunswick,186380,Business Analytics (MS),108000,PayScale 2024,2024
+Michigan State University,171100,Business Analytics (MS),108000,PayScale 2024,2024
+University of Pittsburgh,207547,Business Analytics (MS),105000,PayScale 2024,2024
+Ohio State University,204796,Business Analytics (MS),108000,PayScale 2024,2024
+Texas A&M University,228723,Business Analytics (MS),108000,PayScale 2024,2024
+University of Tennessee-Knoxville,221759,Business Analytics (MS),105000,PayScale 2024,2024
+University of Georgia,139940,Business Analytics (MS),105000,PayScale 2024,2024
+University of Florida,134130,Business Analytics (MS),108000,PayScale 2024,2024
+North Carolina State University,199193,Business Analytics (MS),108000,PayScale 2024,2024
+University of Virginia,234076,Business Analytics (MS),118000,PayScale 2024,2024
