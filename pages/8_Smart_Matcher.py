@@ -156,9 +156,28 @@ target_cip = effective_profile.get("target_field_cip", "")
 cip_prefix = target_cip[:2] if target_cip else ""
 
 _is_grad_mode = target_degree_val in _GRAD_DEGREES
-# For grad searches, restrict to schools that award graduate degrees (level 4).
-# This prevents vocational/tech schools (level 1-2) from dominating the results.
-_degree_filter = 4 if _is_grad_mode else 0
+
+# Degree-level filters for grad searches (HIGHDEG, PREDDEG, ICLEVEL).
+# These mirror the College Scorecard HIGHDEG/PREDDEG/ICLEVEL variables and
+# prevent vocational / community-college results from appearing for MBA searches.
+#
+#   HIGHDEG = 4  → school awards graduate degrees
+#   PREDDEG ≥ 3  → school predominantly awards bachelor's or higher
+#   ICLEVEL = 1  → 4-year institution
+#
+# For bachelor's searches keep HIGHDEG ≥ 3 and PREDDEG ≥ 3 (no ICLEVEL filter).
+if _is_grad_mode:
+    _highest_degree = 4
+    _min_pred_degree = 3
+    _iclevel = 1
+elif target_degree_val == "Bachelor's":
+    _highest_degree = 3
+    _min_pred_degree = 3
+    _iclevel = 0
+else:
+    _highest_degree = 0
+    _min_pred_degree = 0
+    _iclevel = 0
 
 with st.spinner(
     f"🔍 Searching schools offering {field_override}..." if lang == "en"
@@ -170,7 +189,9 @@ with st.spinner(
         cip_2digit=cip_prefix,
         per_page=100,
         n_pages=2,
-        highest_degree=_degree_filter,
+        highest_degree=_highest_degree,
+        min_pred_degree=_min_pred_degree,
+        iclevel=_iclevel,
     )
     # Fallback 1: drop state filter if too few results
     if len(raw) < 10 and preferred_states:
@@ -180,7 +201,9 @@ with st.spinner(
             cip_2digit=cip_prefix,
             per_page=100,
             n_pages=2,
-            highest_degree=_degree_filter,
+            highest_degree=_highest_degree,
+            min_pred_degree=_min_pred_degree,
+            iclevel=_iclevel,
         )
     # Fallback 2: drop CIP filter too (API may not support it for all fields)
     if len(raw) < 10:
@@ -190,7 +213,9 @@ with st.spinner(
             cip_2digit="",
             per_page=100,
             n_pages=2,
-            highest_degree=_degree_filter,
+            highest_degree=_highest_degree,
+            min_pred_degree=_min_pred_degree,
+            iclevel=_iclevel,
         )
 
 rows = [matcher_result_to_row(r) for r in raw]
@@ -218,14 +243,34 @@ if not include_no_data:
     df = df.dropna(subset=["earnings_10yr", "net_price"])
 
 if df.empty:
-    st.error(
-        "No schools match your budget and data requirements. "
-        "Try increasing your annual budget in the sidebar or toggle "
-        "'Include schools with missing data'."
-        if lang == "en"
-        else "找不到符合預算且有完整資料的學校。請在左側提高年預算，或開啟「包含資料缺失學校」。"
-    )
+    if _is_grad_mode and _budget < 60000:
+        st.error(
+            f"No **{target_degree_val}** programs found within your **${_budget:,}/yr** budget. "
+            "Most graduate programs cost $30k–$70k/yr in tuition. "
+            "Try increasing your annual budget in the sidebar (suggested: $50,000–$70,000)."
+            if lang == "en"
+            else f"在 **${_budget:,}/yr** 預算內找不到 **{target_degree_val}** 課程。"
+                 "大多數研究所課程每年學費為 $30k–$70k。建議在左側將年預算提高至 $50,000–$70,000。"
+        )
+    else:
+        st.error(
+            "No schools match your budget and data requirements. "
+            "Try increasing your annual budget in the sidebar or toggle "
+            "'Include schools with missing data'."
+            if lang == "en"
+            else "找不到符合預算且有完整資料的學校。請在左側提高年預算，或開啟「包含資料缺失學校」。"
+        )
     st.stop()
+
+# Warn (but don't stop) when very few schools pass all filters
+if len(df) < 10 and _is_grad_mode:
+    st.warning(
+        f"Only **{len(df)} schools** found after applying budget and degree-level filters. "
+        "Consider raising your annual budget or removing state/type filters to see more options."
+        if lang == "en"
+        else f"套用預算與學位層級篩選後，僅找到 **{len(df)} 所學校**。"
+             "建議提高年預算或移除州別/類型篩選，以查看更多選項。"
+    )
 
 # ── Fetch field-specific earnings BEFORE scoring ──────────────────────────────
 # This lets score_schools_df use field_earnings in the employment dimension
