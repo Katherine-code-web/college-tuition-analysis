@@ -112,6 +112,39 @@ college-tuition-analysis/
 
 ---
 
+## Running the Agent
+
+The AI agent orchestrator uses the Anthropic Claude API to answer complex questions about colleges, costs, and financial aid.
+
+### Getting an API Key
+
+1. Go to [console.anthropic.com](https://console.anthropic.com)
+2. Sign in and navigate to **API Keys**
+3. Click **Create Key**, copy it, and add it to your `.env` file:
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+### Zero-Cost Demo Mode
+
+Set `DEMO_MODE=true` in your `.env` to run the agent without making any API calls. This is useful for UI testing and demos:
+
+```
+DEMO_MODE=true
+```
+
+When enabled, the agent returns a canned response immediately — no tokens are consumed.
+
+### Cost Protection
+
+We recommend setting a **monthly spend limit** in your Anthropic Console to prevent unexpected charges:
+
+1. Go to [console.anthropic.com](https://console.anthropic.com) → **Plans & Billing**
+2. Set a monthly spend limit (e.g. $5–$10 for personal use)
+3. The session-level limit (`DAILY_AGENT_RUN_LIMIT`, default 5) provides an additional in-app guardrail
+
+---
+
 ## How to Run
 
 ### 1. Install dependencies
